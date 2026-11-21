@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+out/
+run/
+runs/
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+eclipse/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ключи и локальные настройки не коммитим
+config/
+*.local.json
