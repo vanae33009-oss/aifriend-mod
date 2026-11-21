@@ -73,26 +73,27 @@ final class Speaker {
         int rate = job.pcm().sampleRate();
         short[] s = job.pcm().samples();
         String device = VoiceSettings.get().outputDevice;
+        SourceDataLine line = null;
         Mixer mixer = findMixer(device);
-        // Устройство может не уметь играть на частоте озвучки (например 24 кГц): тогда пересчитываем звук в 48 или 44,1 кГц.
-        int outRate = rate;
-        for (int candidate : new int[] { rate, 48_000, 44_100 }) {
-            AudioFormat f = new AudioFormat(candidate, 16, 2, true, false);
-            DataLine.Info info = new DataLine.Info(SourceDataLine.class, f);
-            if (mixer != null ? mixer.isLineSupported(info) : AudioSystem.isLineSupported(info)) {
-                outRate = candidate;
-                break;
+        if (mixer != null) {
+            line = tryOpen(mixer, rate, s);
+            if (line == null) {
+                AiFriendMod.LOGGER.warn("AI Friend: output device '{}' could not be opened, using the system default", device);
             }
         }
-        if (outRate != rate) {
-            s = resample(s, rate, outRate);
-            rate = outRate;
+        if (line == null) {
+            line = tryOpen(null, rate, s);
         }
-        AudioFormat fmt = new AudioFormat(rate, 16, 2, true, false);
-        SourceDataLine line = mixer != null
-                ? (SourceDataLine) mixer.getLine(new DataLine.Info(SourceDataLine.class, fmt))
-                : AudioSystem.getSourceDataLine(fmt);
-        line.open(fmt, rate * 4 / 2);
+        if (line == null) {
+            throw new IllegalStateException("no audio output line could be opened (voice " + rate + " Hz)");
+        }
+        AudioFormat fmt = line.getFormat();
+        if ((int) fmt.getSampleRate() != rate) {
+            s = resample(s, rate, (int) fmt.getSampleRate());
+            rate = (int) fmt.getSampleRate();
+        }
+        AiFriendMod.LOGGER.info("AI Friend: playing {} samples at {} Hz on '{}'", s.length, rate,
+                mixer != null ? device : "system default");
         line.start();
         playing = true;
         currentRadius = job.radius();
@@ -119,6 +120,23 @@ final class Speaker {
             line.stop();
             line.close();
         }
+    }
+
+    /** Пробует открыть линию на частоте озвучки, затем на 48 и 44,1 кГц. Возвращает null, если не вышло. */
+    @Nullable
+    private static SourceDataLine tryOpen(@Nullable Mixer mixer, int voiceRate, short[] samples) {
+        for (int candidate : new int[] { voiceRate, 48_000, 44_100 }) {
+            try {
+                AudioFormat f = new AudioFormat(candidate, 16, 2, true, false);
+                DataLine.Info info = new DataLine.Info(SourceDataLine.class, f);
+                SourceDataLine l = mixer != null ? (SourceDataLine) mixer.getLine(info) : (SourceDataLine) AudioSystem.getLine(info);
+                l.open(f, candidate * 4 / 2);
+                return l;
+            } catch (Exception e) {
+                AiFriendMod.LOGGER.debug("AI Friend: output format {} Hz failed: {}", candidate, e.toString());
+            }
+        }
+        return null;
     }
 
     @Nullable
