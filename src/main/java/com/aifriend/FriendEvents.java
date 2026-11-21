@@ -1,5 +1,10 @@
 package com.aifriend;
 
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.UUID;
+
 import com.aifriend.ai.AiSettings;
 import com.aifriend.command.FriendCommands;
 import com.aifriend.entity.FriendEntity;
@@ -11,6 +16,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 @EventBusSubscriber(modid = AiFriendMod.MODID)
@@ -46,14 +52,36 @@ public final class FriendEvents {
         if (!AiSettings.get().autoSpawn || player.getPersistentData().getBoolean(SPAWNED_TAG)) {
             return;
         }
-        player.server.execute(() -> {
-            boolean has = !player.serverLevel().getEntitiesOfClass(FriendEntity.class, player.getBoundingBox().inflate(128.0),
+        // Проверяем не сразу, а через ~5 секунд: к этому времени уже загружены чанки со старым другом, и дубликат не создастся.
+        PENDING.put(player.getUUID(), 100);
+    }
+
+    private static final Map<UUID, Integer> PENDING = new HashMap<>();
+
+    @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
+        if (PENDING.isEmpty()) {
+            return;
+        }
+        Iterator<Map.Entry<UUID, Integer>> it = PENDING.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<UUID, Integer> e = it.next();
+            if (e.getValue() > 1) {
+                e.setValue(e.getValue() - 1);
+                continue;
+            }
+            it.remove();
+            ServerPlayer player = event.getServer().getPlayerList().getPlayer(e.getKey());
+            if (player == null || player.getPersistentData().getBoolean(SPAWNED_TAG)) {
+                continue;
+            }
+            boolean has = !player.serverLevel().getEntitiesOfClass(FriendEntity.class, player.getBoundingBox().inflate(160.0),
                     x -> player.getUUID().equals(x.getOwnerUUID())).isEmpty();
             if (!has) {
                 FriendCommands.spawnFriend(player, null);
             }
             player.getPersistentData().putBoolean(SPAWNED_TAG, true);
-        });
+        }
     }
 
     /** Игрок погиб: его боты поблизости это замечают и могут отреагировать. */

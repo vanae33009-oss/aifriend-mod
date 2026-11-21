@@ -42,7 +42,8 @@ public class FriendMineGoal extends Goal {
 
     private static final int[][] DIRS = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } };
     private static final int MAX_TUNNEL = 72;
-    private static final int MAX_TURNS = 10;
+    private static final int MAX_TURNS = 40;
+    private static final int MAX_RELOCATIONS = 4;
     private static final int MAX_TICKS = 20 * 60 * 25;
     private static final double REACH = 4.4;
 
@@ -80,6 +81,10 @@ public class FriendMineGoal extends Goal {
     private int lootTicks;
     private int scanCooldown;
     private int returnIndex;
+    private int relocations;
+    @Nullable
+    private BlockPos relocateTo;
+    private int relocateTicks;
 
     public FriendMineGoal(FriendEntity friend) {
         this.friend = friend;
@@ -141,6 +146,8 @@ public class FriendMineGoal extends Goal {
             }
         }
         turns = 0;
+        relocations = 0;
+        relocateTo = null;
         tunnelLen = 0;
         startTick = friend.tickCount;
         stopReason = "";
@@ -182,7 +189,7 @@ public class FriendMineGoal extends Goal {
             beginJob();
         }
         FriendEntity.Job job = friend.job();
-        if (job.remaining <= 0) {
+        if (job.remaining <= 0 && lootTicks <= 0) {
             beginReturn("");
             return;
         }
@@ -196,6 +203,19 @@ public class FriendMineGoal extends Goal {
         }
         if (tunnelLen > MAX_TUNNEL) {
             beginReturn("the tunnel got long and found nothing more");
+            return;
+        }
+
+        // перейти на другое место, если здесь копать небезопасно
+        if (relocateTo != null) {
+            BlockPos r = relocateTo;
+            if (relocateTicks++ % 10 == 0) {
+                friend.getNavigation().moveTo(r.getX() + 0.5, r.getY(), r.getZ() + 0.5, 1.0);
+            }
+            if (friend.distanceToSqr(Vec3.atBottomCenterOf(r)) < 2.5 * 2.5 || relocateTicks > 300) {
+                relocateTo = null;
+                friend.getNavigation().stop();
+            }
             return;
         }
 
@@ -241,9 +261,36 @@ public class FriendMineGoal extends Goal {
 
     // ------------------------------------------------------------------ шаг шахты
 
+    /** Клетки, которые нужно освободить для шага в направлении idx, и клетка, куда встанут ноги. */
+    private BlockPos[] stepCells(BlockPos p, int idx, boolean down) {
+        int[] d = DIRS[idx];
+        BlockPos front = p.offset(d[0], 0, d[1]);
+        if (down) {
+            return new BlockPos[] { front.above(), front, front.below(), front.below() };
+        }
+        return new BlockPos[] { front, front.above(), front, front };
+    }
+
+    /** Безопасно ли копать в этом направлении: без воды, лавы, сундуков, неразрушимых блоков и глубоких провалов. */
+    private boolean stepSafe(Level level, BlockPos p, int idx, boolean down) {
+        BlockPos[] c = stepCells(p, idx, down);
+        for (int i = 0; i < 3; i++) {
+            if (isDanger(level, c[i])) {
+                return false;
+            }
+        }
+        BlockPos floor = c[3].below();
+        if (fluid(level, floor) || neighborFluid(level, floor)) {
+            return false;
+        }
+        if (passable(level, floor) && passable(level, floor.below())) {
+            return false; // провал
+        }
+        return !(down && !passable(level, floor) && level.getBlockState(floor).getDestroySpeed(level, floor) < 0);
+    }
+
     private void planStep(Level level) {
         BlockPos p = friend.blockPosition();
-        int[] d = DIRS[dirIndex];
         boolean down = phase == Phase.DESCEND;
 
         if (down && p.getY() <= targetY) {
@@ -254,58 +301,61 @@ public class FriendMineGoal extends Goal {
             placeTorch(level, p);
         }
 
-        BlockPos front = p.offset(d[0], 0, d[1]);
-        List<BlockPos> cells = new ArrayList<>();
-        BlockPos stand; // клетка, где окажутся ноги
-        if (down) {
-            cells.add(front.above());
-            cells.add(front);
-            cells.add(front.below());
-            stand = front.below();
-        } else {
-            cells.add(front);
-            cells.add(front.above());
-            stand = front;
-        }
-
-        for (BlockPos c : cells) {
-            if (isDanger(level, c)) {
-                turn("danger ahead");
-                return;
+        if (!stepSafe(level, p, dirIndex, down)) {
+            // Пробуем другие стороны, прежде чем сдаваться: рядом с водой или обрывом безопасная всегда найдётся.
+            for (int k = 1; k <= 3; k++) {
+                int idx = (dirIndex + k) % 4;
+                if (stepSafe(level, p, idx, down)) {
+                    dirIndex = idx;
+                    turns++;
+                    return;
+                }
             }
-        }
-        BlockPos floor = stand.below();
-        if (fluid(level, floor) || neighborFluid(level, floor)) {
-            turn("fluid below");
-            return;
-        }
-        if (passable(level, floor) && passable(level, floor.below())) {
-            turn("a drop");
-            return;
-        }
-        if (level.getBlockState(floor).getDestroySpeed(level, floor) < 0 && !passable(level, floor) && down) {
-            turn("bedrock");
+            if (down && relocations < MAX_RELOCATIONS) {
+                relocations++;
+                relocateTo = pickRelocation(level);
+                relocateTicks = 0;
+                if (relocateTo != null) {
+                    return;
+                }
+            }
+            stopReason = "no safe place to dig here (water, lava or drops all around)";
+            beginReturn(stopReason);
             return;
         }
 
-        for (BlockPos c : cells) {
-            if (!passable(level, c)) {
-                startBreak(level, c, false);
+        BlockPos[] cells = stepCells(p, dirIndex, down);
+        for (int i = 0; i < 3; i++) {
+            if (!passable(level, cells[i])) {
+                startBreak(level, cells[i], false);
                 return;
             }
         }
 
         // свободно: идём
-        moveTo = stand;
+        moveTo = cells[3];
         moveTicks = 0;
         if (!down) {
             tunnelLen++;
         }
     }
 
+    /** Точка в 10-16 блоках на поверхности в случайную сторону, чтобы начать копать в другом месте. */
+    @Nullable
+    private BlockPos pickRelocation(Level level) {
+        double a = friend.getRandom().nextDouble() * Math.PI * 2.0;
+        double dist = 10 + friend.getRandom().nextDouble() * 6;
+        BlockPos col = new BlockPos((int) Math.floor(friend.getX() + Math.cos(a) * dist), 0,
+                (int) Math.floor(friend.getZ() + Math.sin(a) * dist));
+        if (!level.hasChunkAt(col)) {
+            return null;
+        }
+        return level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, col);
+    }
+
     private void turn(String reason) {
         turns++;
-        dirIndex = (dirIndex + (turns % 2 == 1 ? 1 : 3)) % 4;
+        dirIndex = (dirIndex + 1) % 4;
         if (turns > MAX_TURNS) {
             stopReason = reason;
         }

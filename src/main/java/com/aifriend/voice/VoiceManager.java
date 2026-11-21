@@ -8,7 +8,6 @@ import java.util.function.Consumer;
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.TargetDataLine;
 
 import com.aifriend.AiFriendMod;
 import com.aifriend.entity.FriendEntity;
@@ -51,6 +50,7 @@ public final class VoiceManager {
     private static volatile long meterUntil;
     private static volatile String message;
     private static long lastWarnMs;
+    private static volatile long micFailedAt;
     private static int ticks;
 
     // тест распознавания из экрана настроек
@@ -82,7 +82,9 @@ public final class VoiceManager {
         String dev = d.micDevice;
         if (want) {
             if (!captureRun || !Objects.equals(dev, captureDevice)) {
-                startCapture(dev);
+                if (System.currentTimeMillis() - micFailedAt > 10_000 || !Objects.equals(dev, captureDevice)) {
+                    startCapture(dev);
+                }
             }
         } else if (captureRun) {
             stopCapture();
@@ -203,18 +205,20 @@ public final class VoiceManager {
     }
 
     private static void captureLoop(String dev, int gen) {
-        TargetDataLine line;
+        Mic.Capture line;
         try {
             line = Mic.open(dev);
         } catch (Exception e) {
             AiFriendMod.LOGGER.warn("AI Friend: microphone unavailable: {}", e.toString());
             message = "Microphone unavailable: " + VoiceHttp.shorten(String.valueOf(e.getMessage()), 70);
+            micFailedAt = System.currentTimeMillis(); // повторная попытка не раньше чем через 10 секунд
             if (gen == captureGen) {
                 captureRun = false;
             }
             return;
         }
 
+        AiFriendMod.LOGGER.info("AI Friend: microphone opened ({}), format {} -> 16 kHz mono", dev == null || dev.isBlank() ? "default device" : dev, line.description());
         byte[] buf = new byte[CHUNK_BYTES];
         ByteArrayOutputStream speech = new ByteArrayOutputStream();
         java.util.ArrayDeque<byte[]> preRoll = new java.util.ArrayDeque<>();
@@ -226,7 +230,7 @@ public final class VoiceManager {
             while (captureRun && gen == captureGen) {
                 int n = line.read(buf, 0, buf.length);
                 if (n <= 0) {
-                    continue;
+                    throw new IllegalStateException("microphone stopped delivering audio");
                 }
                 double rms = rms(buf, n);
                 level = (float) Math.max(rms, level * 0.85);
@@ -257,6 +261,7 @@ public final class VoiceManager {
                     case PUSH_TO_TALK -> {
                         boolean down = pttDown && friendNearby;
                         if (pttDown && !friendNearby && !pttWas) {
+                            AiFriendMod.LOGGER.info("AI Friend: talk key pressed but no friend within 40 blocks");
                             warn("No friend nearby - nobody to talk to");
                         }
                         if (down) {
@@ -314,6 +319,7 @@ public final class VoiceManager {
             }
         } catch (Exception e) {
             AiFriendMod.LOGGER.warn("AI Friend: microphone loop stopped: {}", e.toString());
+            micFailedAt = System.currentTimeMillis();
         } finally {
             recording = false;
             try {
@@ -328,14 +334,36 @@ public final class VoiceManager {
         }
     }
 
+    private static int peak(byte[] pcm) {
+        int max = 0;
+        for (int i = 0; i + 1 < pcm.length; i += 2) {
+            int v = Math.abs((short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8)));
+            if (v > max) {
+                max = v;
+            }
+        }
+        return max;
+    }
+
     private static void finishSpeech(ByteArrayOutputStream speech) {
         byte[] pcm = speech.toByteArray();
         speech.reset();
         if (pcm.length < MIN_SPEECH_BYTES) {
+            AiFriendMod.LOGGER.info("AI Friend: recording too short ({} ms), ignored", pcm.length / 32);
+            warn("Mic: too short, hold the key while speaking");
+            return;
+        }
+        int peak = peak(pcm);
+        AiFriendMod.LOGGER.info("AI Friend: recorded {} s, peak level {}/32767", String.format("%.1f", pcm.length / 32000.0), peak);
+        if (peak < 30) {
+            AiFriendMod.LOGGER.warn("AI Friend: the microphone delivers silence. On macOS allow microphone access for your launcher/Java "
+                    + "(System Settings > Privacy & Security > Microphone), on Windows check Settings > Privacy > Microphone and the input device.");
+            warn("Mic hears only silence: check microphone permission (macOS: Privacy > Microphone)");
             return;
         }
         VoiceSettings.SttResolved r = VoiceSettings.resolveStt();
         if (!r.usable()) {
+            AiFriendMod.LOGGER.warn("AI Friend: speech recognition is not configured (K > Voice > Recognition)");
             warn("Voice: set up speech recognition (key K > Voice)");
             return;
         }
@@ -350,7 +378,12 @@ public final class VoiceManager {
                     return;
                 }
                 String t = text == null ? "" : text.trim();
-                if (t.length() < 2 || mc.player == null || !friendNearby) {
+                AiFriendMod.LOGGER.info("AI Friend: recognized '{}'", t);
+                if (t.length() < 2) {
+                    warn("Mic: nothing recognized, try speaking louder or choose the language in Voice settings");
+                    return;
+                }
+                if (mc.player == null || !friendNearby) {
                     return;
                 }
                 PacketDistributor.sendToServer(new VoiceTextPayload(t));

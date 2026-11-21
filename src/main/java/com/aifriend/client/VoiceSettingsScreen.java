@@ -87,7 +87,17 @@ public class VoiceSettingsScreen extends BaseSettingsScreen {
                 v -> Component.translatable("aifriend.field.volume", Math.round(v * 100)),
                 v -> data.outputVolume = v);
 
-        addNote(5, Component.translatable("aifriend.note.talk_key", AiFriendClient.TALK.getTranslatedKeyMessage()), 0x808080);
+        List<String> outs = new ArrayList<>();
+        outs.add("");
+        outs.addAll(Mic.outputDevices());
+        String outCurrent = outs.contains(data.outputDevice) ? data.outputDevice : "";
+        addRenderableWidget(CycleButton.builder((String s) -> s.isEmpty()
+                        ? Component.translatable("aifriend.mic.default") : Component.literal(shorten(s, 34)))
+                .withValues(outs)
+                .withInitialValue(outCurrent)
+                .create(left, row(5), WIDTH, 20, Component.translatable("aifriend.field.output_device"), (btn, value) -> data.outputDevice = value));
+
+        addNote(6, Component.translatable("aifriend.note.talk_key", AiFriendClient.TALK.getTranslatedKeyMessage()), 0x808080);
     }
 
     // ------------------------------------------------------------------ вкладка «Озвучка»

@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 
 import com.aifriend.ai.AiSettings;
 import com.aifriend.entity.FriendEntity;
+import com.aifriend.entity.Natural;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -40,6 +41,10 @@ public class FriendCollectGoal extends Goal {
     private static final int MAX_SEARCH_LEGS = 5;
     private static final int SEARCH_STEP = 14;
     private static final int MAX_CANDIDATES = 24;
+    /** Дальний обзор: бот видит деревья и жилы вокруг на десятки блоков (но сквозь землю не видит). */
+    private static final int WIDE_R = 48;
+    private static final int WIDE_VY = 24;
+    private static final int MAX_VEIN_BONUS = 40;
 
     private final FriendEntity friend;
     private final Map<Long, Integer> blacklist = new HashMap<>();
@@ -60,6 +65,10 @@ public class FriendCollectGoal extends Goal {
     private int collectWait;
     private int scanCooldown;
     private int failedScans;
+    private int wideReadyTick;
+    private int walkLimit = 260;
+    private int veinBonus;
+    private boolean pendingFinish;
 
     public FriendCollectGoal(FriendEntity friend) {
         this.friend = friend;
@@ -70,17 +79,24 @@ public class FriendCollectGoal extends Goal {
     public boolean canUse() {
         if (friend.getTask() != FriendEntity.Task.COLLECT || friend.getCollectRemaining() <= 0) {
             searchLegs = 0;
+            veinBonus = 0;
             return false;
         }
         if (--scanCooldown > 0) {
             return false;
         }
         scanCooldown = 10;
-        BlockPos found = findTarget();
+        BlockPos found = findTarget(14, 8, MAX_CANDIDATES);
+        if (found == null && friend.tickCount >= wideReadyTick) {
+            found = findTarget(WIDE_R, WIDE_VY, 8); // ближе ничего нет: смотрим дальше
+            if (found == null) {
+                wideReadyTick = friend.tickCount + 100;
+            }
+        }
         if (found != null) {
             failedScans = 0;
             searchLegs = 0;
-            target = found;
+            setTarget(found);
             return true;
         }
         // Рядом ничего нет: идём искать дальше.
@@ -116,6 +132,12 @@ public class FriendCollectGoal extends Goal {
 
     @Override
     public void stop() {
+        if (pendingFinish) {
+            pendingFinish = false;
+            if (friend.getTask() == FriendEntity.Task.COLLECT) {
+                friend.finishCollect(true);
+            }
+        }
         fx.clear(friend);
         friend.getNavigation().stop();
         target = null;
@@ -140,6 +162,10 @@ public class FriendCollectGoal extends Goal {
             }
             if (collectWait == 0) {
                 lootPos = null;
+                if (pendingFinish) { // последний блок: сначала подобрали выпавшее, теперь заканчиваем
+                    pendingFinish = false;
+                    friend.finishCollect(true);
+                }
             }
             return;
         }
@@ -174,7 +200,7 @@ public class FriendCollectGoal extends Goal {
                     return;
                 }
             }
-            if (walkTicks > 260) {
+            if (walkTicks > walkLimit) {
                 blacklist(target);
                 target = null;
             }
@@ -194,6 +220,12 @@ public class FriendCollectGoal extends Goal {
         }
     }
 
+    private void setTarget(BlockPos p) {
+        target = p;
+        walkTicks = 0;
+        walkLimit = 260 + (int) (Math.sqrt(friend.distanceToSqr(Vec3.atCenterOf(p))) * 14.0);
+    }
+
     // ------------------------------------------------------------------ поиск по округе
 
     private void searchStep() {
@@ -211,9 +243,9 @@ public class FriendCollectGoal extends Goal {
         }
         searchTicks++;
         if (searchTicks % 20 == 0) {
-            BlockPos found = findTarget(); // по дороге заметили подходящее - переключаемся
+            BlockPos found = findTarget(14, 8, MAX_CANDIDATES); // по дороге заметили подходящее - переключаемся
             if (found != null) {
-                target = found;
+                setTarget(found);
                 searchTarget = null;
                 searchLegs = 0;
                 walkTicks = 0;
@@ -276,11 +308,49 @@ public class FriendCollectGoal extends Goal {
         }
         level.destroyBlock(target, false, friend);
         lootPos = target;
-        collectWait = 12;
+        collectWait = 16;
         target = null;
         progress = 0;
         walkTicks = 0;
-        friend.onBlockCollected();
+        // Жила: настоящий игрок выбирает её всю, а не одну руду. Если это последний блок задачи, но рядом есть такая же руда, продолжаем.
+        String ore = oreName(state);
+        if (ore != null && friend.getCollectRemaining() <= 1 && veinBonus < MAX_VEIN_BONUS && veinNeighbor(level, lootPos, ore) != null) {
+            friend.extendCollect(1);
+            veinBonus++;
+        }
+        if (friend.markCollected() <= 0) {
+            pendingFinish = true;
+        }
+    }
+
+    @Nullable
+    private static String oreName(BlockState state) {
+        String n = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
+        return n.endsWith("_ore") ? n.replace("deepslate_", "") : null;
+    }
+
+    @Nullable
+    private BlockPos veinNeighbor(Level level, BlockPos from, String ore) {
+        BlockPos best = null;
+        double bd = Double.MAX_VALUE;
+        for (BlockPos p : BlockPos.betweenClosed(from.offset(-2, -2, -2), from.offset(2, 2, 2))) {
+            if (p.equals(from) || isBlacklisted(p)) {
+                continue;
+            }
+            BlockState s = level.getBlockState(p);
+            if (!ore.equals(oreName(s)) || !friend.canHarvest(s) || !Natural.isNatural(level, p, s)) {
+                continue;
+            }
+            if (!canMineFromHere(Vec3.atCenterOf(p)) && findStandPos(p) == null) {
+                continue;
+            }
+            double d = p.distSqr(from);
+            if (d < bd) {
+                bd = d;
+                best = p.immutable();
+            }
+        }
+        return best;
     }
 
     private boolean canMineFromHere(Vec3 center) {
@@ -295,11 +365,9 @@ public class FriendCollectGoal extends Goal {
     // ------------------------------------------------------------------ поиск блока
 
     @Nullable
-    private BlockPos findTarget() {
+    private BlockPos findTarget(int r, int vy, int maxChecks) {
         Level level = friend.level();
         BlockPos origin = friend.blockPosition();
-        int r = 14;
-        int vy = 8;
         List<BlockPos> candidates = new ArrayList<>();
         for (BlockPos p : BlockPos.betweenClosed(origin.offset(-r, -vy, -r), origin.offset(r, vy, r))) {
             if (!level.hasChunkAt(p) || isBlacklisted(p)) {
@@ -320,9 +388,14 @@ public class FriendCollectGoal extends Goal {
 
         int checked = 0;
         for (BlockPos p : candidates) {
-            if (checked++ >= MAX_CANDIDATES) {
+            if (checked >= maxChecks) {
                 break;
             }
+            if (!Natural.isNatural(level, p, level.getBlockState(p))) {
+                blacklist(p); // дом, деревня или постройка игрока: не трогаем
+                continue;
+            }
+            checked++;
             if (isReachable(p)) {
                 return p;
             }

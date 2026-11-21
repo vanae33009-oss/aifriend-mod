@@ -395,8 +395,11 @@ public final class FriendMind {
                 - guard: stay close to the player and actively fight hostile mobs
                 - collect: gather blocks. target = block id such as oak_log, stone, coal_ore, iron_ore, sand, or a group word: log, ore. \
                 count = number of blocks (1-64). You can only mine what you have the right tool for (stone and ores need a pickaxe; otherwise nothing drops). \
-                Look at "blocks you can see nearby" in STATE and use those exact names (in a savanna it is acacia_log, not oak_log; any kind of log counts for logs). \
-                If nothing suitable is in sight, you walk around and search by yourself for a while before giving up.
+                Look at "blocks you can see nearby" and "farther away" in STATE and use those exact names (in a savanna it is acacia_log, not oak_log; any kind of log counts for logs). \
+                You walk to what you see by yourself, even 40-50 blocks away, and if nothing is in sight you wander and search for a while before giving up. \
+                You only take natural trees and rock: you never tear apart villages, houses or anything the player built, and you leave those logs and blocks alone. \
+                For ore, once you start on a vein you keep going and take the whole vein, so a small count is fine. When the player points at ore, \
+                ask for a decent amount (6-12) unless they say how many.
                 - mine: dig a mine to find ore underground. target = coal, iron, copper, gold, redstone, lapis or diamond, or "stone" (dig down a few blocks \
                 to get cobblestone when there is no stone on the surface). count = how many ore blocks (1-32). \
                 You dig a staircase down to the depth where that ore is most common, then a tunnel, take the ore you can see along the way, and walk back up. \

@@ -52,5 +52,6 @@
   "aifriend.skin.auto": "Auto (by gender)",
   "aifriend.note.skins": "Own skins: 64x64 png in %s (name ending in 'slim' = thin arms)",
   "aifriend.field.auto_spawn": "Joins the world automatically",
-  "aifriend.field.debug": "Debug: show bot actions in chat"
+  "aifriend.field.debug": "Debug: show bot actions in chat",
+  "aifriend.field.output_device": "Output device"
 }

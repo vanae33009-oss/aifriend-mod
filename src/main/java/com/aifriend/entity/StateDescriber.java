@@ -108,6 +108,7 @@ final class StateDescriber {
         }
 
         sb.append("- blocks you can see nearby (name xcount, nearest distance): ").append(visibleBlocks(b)).append('\n');
+        sb.append("- farther away, in sight within ~40 blocks (name xcount, nearest distance and direction): ").append(farResources(b)).append('\n');
 
         Map<String, Integer> nearby = new TreeMap<>(Comparator.naturalOrder());
         for (LivingEntity e : level.getEntitiesOfClass(LivingEntity.class, b.getBoundingBox().inflate(16.0),
@@ -164,6 +165,77 @@ final class StateDescriber {
             parts.add(en.getKey() + " x" + en.getValue()[0] + " (" + Math.round(Math.sqrt(en.getValue()[1])) + ")");
         }
         return String.join(", ", parts);
+    }
+
+    /**
+     * Дальний обзор (до ~40 блоков): природные деревья (по основанию ствола) и открытые руды с расстоянием и стороной света.
+     * Это дорогой обход, поэтому результат кэшируется на 10 секунд.
+     */
+    private static String farResources(FriendEntity b) {
+        if (b.tickCount - b.farScanTick < 200 && b.farScanTick >= 0) {
+            return b.farScanCache;
+        }
+        Level level = b.level();
+        BlockPos c = b.blockPosition();
+        Map<String, int[]> found = new HashMap<>(); // имя -> {количество, ближайшее расстояние в квадрате, dx, dz}
+        for (BlockPos p : BlockPos.betweenClosed(c.offset(-40, -20, -40), c.offset(40, 20, 40))) {
+            if (!level.hasChunkAt(p)) {
+                continue;
+            }
+            BlockState s = level.getBlockState(p);
+            if (s.isAir()) {
+                continue;
+            }
+            String path = BuiltInRegistries.BLOCK.getKey(s.getBlock()).getPath();
+            String name = null;
+            if (path.endsWith("_ore")) {
+                if (exposed(level, p)) {
+                    name = path.replace("deepslate_", "");
+                }
+            } else if (path.endsWith("_log") && !path.startsWith("stripped_")
+                    && !BuiltInRegistries.BLOCK.getKey(level.getBlockState(p.below()).getBlock()).getPath().endsWith("_log")
+                    && Natural.isNatural(level, p, s)) {
+                name = path.replace("_log", "") + " trees";
+            }
+            if (name == null) {
+                continue;
+            }
+            int d = (int) p.distSqr(c);
+            int[] e = found.computeIfAbsent(name, k -> new int[] { 0, Integer.MAX_VALUE, 0, 0 });
+            e[0]++;
+            if (d < e[1]) {
+                e[1] = d;
+                e[2] = p.getX() - c.getX();
+                e[3] = p.getZ() - c.getZ();
+            }
+        }
+        String result;
+        if (found.isEmpty()) {
+            result = "nothing (no natural trees or open ore in view)";
+        } else {
+            List<Map.Entry<String, int[]>> list = new ArrayList<>(found.entrySet());
+            list.sort((x, y) -> Integer.compare(x.getValue()[1], y.getValue()[1]));
+            List<String> parts = new ArrayList<>();
+            for (int i = 0; i < Math.min(8, list.size()); i++) {
+                Map.Entry<String, int[]> en = list.get(i);
+                int[] v = en.getValue();
+                parts.add(en.getKey() + " x" + v[0] + " (" + Math.round(Math.sqrt(v[1])) + ", " + compass(v[2], v[3]) + ")");
+            }
+            result = String.join(", ", parts);
+        }
+        b.farScanCache = result;
+        b.farScanTick = b.tickCount;
+        return result;
+    }
+
+    private static String compass(int dx, int dz) {
+        if (Math.abs(dx) < 3 && Math.abs(dz) < 3) {
+            return "right here";
+        }
+        double deg = Math.toDegrees(Math.atan2(dx, -dz)); // 0 = север (-Z), 90 = восток (+X)
+        String[] names = { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" };
+        int idx = (int) Math.round(((deg % 360) + 360) % 360 / 45.0) % 8;
+        return names[idx];
     }
 
     private static String interesting(BlockState s, Level level, BlockPos p) {

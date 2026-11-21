@@ -52,5 +52,6 @@
   "aifriend.skin.auto": "Авто (по полу)",
   "aifriend.note.skins": "Свои скины: png 64x64 в %s (имя на «slim» = тонкие руки)",
   "aifriend.field.auto_spawn": "Появляется сам при входе в мир",
-  "aifriend.field.debug": "Отладка: действия бота в чате"
+  "aifriend.field.debug": "Отладка: действия бота в чате",
+  "aifriend.field.output_device": "Устройство вывода"
 }

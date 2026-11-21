@@ -98,6 +98,8 @@ public final class VoiceSettings {
         public String micMode = MicMode.PUSH_TO_TALK.name();
         /** Пусто = устройство по умолчанию. */
         public String micDevice = "";
+        /** Устройство вывода звука (пусто = системное по умолчанию). */
+        public String outputDevice = "";
         /** Порог громкости (RMS, 0..1) для режима «по голосу». */
         public double vadThreshold = 0.02;
 
@@ -230,6 +232,7 @@ public final class VoiceSettings {
         if (d.sttProfiles == null) d.sttProfiles = new LinkedHashMap<>();
         if (d.micMode == null) d.micMode = MicMode.PUSH_TO_TALK.name();
         if (d.micDevice == null) d.micDevice = "";
+        if (d.outputDevice == null) d.outputDevice = "";
         if (d.sttLanguage == null) d.sttLanguage = "";
         if (d.ttsCustomUrl == null) d.ttsCustomUrl = "";
         if (d.ttsCustomKey == null) d.ttsCustomKey = "";

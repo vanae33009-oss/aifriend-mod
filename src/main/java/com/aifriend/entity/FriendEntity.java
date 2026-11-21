@@ -158,7 +158,7 @@ public class FriendEntity extends PathfinderMob {
                 .add(Attributes.MAX_HEALTH, 20.0)
                 .add(Attributes.MOVEMENT_SPEED, 0.3)
                 .add(Attributes.ATTACK_DAMAGE, 2.0)
-                .add(Attributes.FOLLOW_RANGE, 32.0);
+                .add(Attributes.FOLLOW_RANGE, 80.0);
     }
 
     // ------------------------------------------------------------------ цели ИИ
@@ -842,11 +842,20 @@ public class FriendEntity extends PathfinderMob {
     }
 
     /** Вызывается целью COLLECT после каждого сломанного блока. */
-    public void onBlockCollected() {
+    /** Нашли продолжение жилы: добываем и её (счёт увеличивается, чтобы задача не закончилась раньше). */
+    public void extendCollect(int n) {
+        collectRemaining += n;
+        collectTotal += n;
+    }
+
+    // кэш дальнего обзора для StateDescriber
+    String farScanCache = "";
+    int farScanTick = -10000;
+
+    /** Блок добыт: уменьшает счётчик и возвращает, сколько осталось. Завершение задачи делает цель после подбора выпавшего. */
+    public int markCollected() {
         collectRemaining--;
-        if (collectRemaining <= 0) {
-            finishCollect(true);
-        }
+        return collectRemaining;
     }
 
     public void finishCollect(boolean success) {
