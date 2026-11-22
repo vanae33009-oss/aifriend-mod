@@ -106,6 +106,10 @@ public final class VoiceSettings {
         // --- озвучка
         public boolean ttsEnabled = true;
         public double outputVolume = 1.0;
+        /** Громкость музыки из файлов. */
+        public double musicVolume = 0.5;
+        /** Приветственное окно уже показывали. */
+        public boolean welcomeSeen = false;
         public String ttsProvider = TtsProvider.ELEVENLABS.name();
         public Map<String, Profile> ttsProfiles = new LinkedHashMap<>();
         public String ttsCustomStyle = ApiStyle.OPENAI.name();
@@ -243,6 +247,7 @@ public final class VoiceSettings {
         if (d.sttCustomModel == null) d.sttCustomModel = "";
         if (d.vadThreshold < 0.003 || d.vadThreshold > 0.3) d.vadThreshold = 0.02;
         if (d.outputVolume < 0.0 || d.outputVolume > 1.0) d.outputVolume = 1.0;
+        if (d.musicVolume < 0.0 || d.musicVolume > 1.0) d.musicVolume = 0.5;
         for (TtsProvider p : TtsProvider.values()) {
             Profile pr = d.ttsProfile(p);
             if (pr.apiKey == null) pr.apiKey = "";

@@ -82,6 +82,8 @@ public final class AiSettings {
         /** Пусто = случайное имя из списка при создании бота. */
         public String botName = "";
         public String personality = "";
+        /** История и роль бота: короткий текст из настроек (дополняется файлом config/aifriend/story.txt). */
+        public String backstory = "";
         /** Пол новых ботов: "male" (по умолчанию) или "female". От него зависят имя, скин и речь. */
         public String botGender = "male";
         /** Скин новых ботов: пусто = случайный подходящий по полу; иначе id встроенного скина или имя png из config/aifriend/skins. */
@@ -96,6 +98,10 @@ public final class AiSettings {
         public boolean debugMessages = false;
         /** Бот сам появляется один раз при первом входе игрока в мир. */
         public boolean autoSpawn = true;
+        /** Может ли бот предлагать музыку (открывает ссылку в браузере после подтверждения). */
+        public boolean musicEnabled = true;
+        /** spotify, yandex или youtube: где искать, если названа только песня. */
+        public String musicService = "spotify";
         /** Во сколько раз бот копает и рубит быстрее обычного игрока (1 = как игрок). */
         public double digSpeed = 1.25;
         /** Бот сам принимает решения, когда его ни о чём не просят (развитие, добыча, крафт). */
@@ -183,8 +189,10 @@ public final class AiSettings {
         if (d.customBaseUrl == null) d.customBaseUrl = "";
         if (d.customApiKey == null) d.customApiKey = "";
         if (d.customModel == null) d.customModel = "";
+        if (d.musicService == null) d.musicService = "spotify";
         if (d.botName == null) d.botName = "";
         if (d.personality == null) d.personality = "";
+        if (d.backstory == null) d.backstory = "";
         if (d.botGender == null || !(d.botGender.equals("male") || d.botGender.equals("female"))) d.botGender = "male";
         if (d.botSkin == null) d.botSkin = "";
         if (d.maxTokens < 50) d.maxTokens = 400;
@@ -238,5 +246,34 @@ public final class AiSettings {
         } catch (Exception e) {
             return fallback;
         }
+    }
+
+    /** Файл с длинной историей/промтом бота: config/aifriend/story.txt. */
+    public static java.nio.file.Path storyFile() {
+        return net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("aifriend").resolve("story.txt");
+    }
+
+    /** Вся история бота: текст из настроек плюс файл story.txt (до 6000 знаков в сумме). Пусто, если не задана. */
+    public static String story() {
+        StringBuilder sb = new StringBuilder();
+        String inline = get().backstory;
+        if (inline != null && !inline.isBlank()) {
+            sb.append(inline.trim());
+        }
+        try {
+            java.nio.file.Path f = storyFile();
+            if (java.nio.file.Files.isRegularFile(f)) {
+                String text = java.nio.file.Files.readString(f, java.nio.charset.StandardCharsets.UTF_8).trim();
+                if (!text.isEmpty()) {
+                    if (sb.length() > 0) {
+                        sb.append("\n");
+                    }
+                    sb.append(text);
+                }
+            }
+        } catch (Exception ignored) {
+            // нет файла или нечитаем: живём без него
+        }
+        return sb.length() > 6000 ? sb.substring(0, 6000) : sb.toString();
     }
 }

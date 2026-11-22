@@ -46,6 +46,11 @@ final class StateDescriber {
         sb.append("- you: health ").append(Math.round(b.getHealth())).append('/').append(Math.round(b.getMaxHealth()))
                 .append(", position ").append(pos.getX()).append(' ').append(pos.getY()).append(' ').append(pos.getZ()).append('\n');
         sb.append("- current task: ").append(b.describeTask()).append('\n');
+        java.util.List<java.nio.file.Path> songs = com.aifriend.MusicCatalog.tracks();
+        if (!songs.isEmpty()) {
+            sb.append("- music files you can play in the game (action music): ").append(songs.stream().limit(20)
+                    .map(com.aifriend.MusicCatalog::title).collect(java.util.stream.Collectors.joining(", "))).append('\n');
+        }
         String plan = b.getMind().getPlan();
         if (!plan.isEmpty()) {
             sb.append("- your plan: ").append(plan).append('\n');

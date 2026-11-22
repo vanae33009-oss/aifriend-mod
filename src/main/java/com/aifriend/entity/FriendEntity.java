@@ -516,6 +516,25 @@ public class FriendEntity extends PathfinderMob {
                 task = Task.FOLLOW;
                 return null;
             }
+            case "music" -> {
+                if (target == null || target.isBlank()) {
+                    return "could not play music: no song, link or service given";
+                }
+                if (!target.trim().toLowerCase(Locale.ROOT).startsWith("http") && level() instanceof net.minecraft.server.level.ServerLevel sl) {
+                    // Названия и "stop" слышат все игроки рядом: у кого есть такой файл, у того он и заиграет.
+                    for (net.minecraft.server.level.ServerPlayer p : sl.players()) {
+                        if (p.distanceToSqr(this) < 64.0 * 64.0) {
+                            PacketDistributor.sendToPlayer(p, new com.aifriend.net.MusicPayload(target.trim()));
+                        }
+                    }
+                    return "music: started '" + target.trim() + "' (files play inside the game for everyone nearby; otherwise the player gets a confirmation window to open the service)";
+                }
+                if (getOwner() instanceof net.minecraft.server.level.ServerPlayer sp) {
+                    PacketDistributor.sendToPlayer(sp, new com.aifriend.net.MusicPayload(target.trim()));
+                    return "music: asked " + sp.getGameProfile().getName() + " to open '" + target.trim() + "' (they get a confirmation window)";
+                }
+                return "could not play music: the player is not around";
+            }
             case "come" -> {
                 task = Task.FOLLOW;
                 Player owner = getOwner();
@@ -849,6 +868,7 @@ public class FriendEntity extends PathfinderMob {
     }
 
     // кэш дальнего обзора для StateDescriber
+    public String collectHint = "";
     String farScanCache = "";
     int farScanTick = -10000;
 
@@ -870,7 +890,9 @@ public class FriendEntity extends PathfinderMob {
             boolean rock = target.contains("stone") || target.contains("ore") || target.equals("deepslate");
             mind.onJobDone(false, "gave up collecting " + target + ": got " + done + " of " + collectTotal
                     + ", nothing more reachable nearby or no suitable tool"
-                    + (rock ? ". There is no rock on the surface here: use the mine action (target stone) to dig down for it." : ""));
+                    + (!collectHint.isEmpty() ? ". " + collectHint
+                    : rock ? ". There is no rock on the surface here: use the mine action (target stone) to dig down for it." : ""));
+            collectHint = "";
         }
     }
 

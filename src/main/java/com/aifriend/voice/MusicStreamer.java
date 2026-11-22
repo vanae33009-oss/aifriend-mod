@@ -1,0 +1,246 @@
+package com.aifriend.voice;
+
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.Mixer;
+import javax.sound.sampled.SourceDataLine;
+
+import javax.annotation.Nullable;
+
+import com.aifriend.AiFriendMod;
+import com.aifriend.MusicCatalog;
+import com.aifriend.client.MusicPlayer;
+import com.mojang.blaze3d.audio.OggAudioStream;
+
+import net.minecraft.client.Minecraft;
+
+/**
+ * Проигрывает в игре твои файлы (.ogg, .wav) из config/aifriend/music. Идёт на то же устройство вывода, что и голос бота,
+ * и приглушается, пока бот говорит. Один трек повторяется, плейлист идёт по кругу вперемешку.
+ */
+public final class MusicStreamer {
+    private static final int MAX_SECONDS = 15 * 60;
+
+    private static volatile Thread thread;
+    private static volatile boolean stop;
+    private static volatile boolean paused;
+    /** 1 - следующий, -1 - предыдущий, 0 - ничего. */
+    private static volatile int cmd;
+    private static volatile boolean loopOne;
+    private static volatile String current = "";
+
+    private MusicStreamer() {
+    }
+
+    public static boolean isPlaying() {
+        Thread t = thread;
+        return t != null && t.isAlive();
+    }
+
+    public static String current() {
+        return current;
+    }
+
+    public static boolean isLoop() {
+        return loopOne;
+    }
+
+    public static boolean isPaused() {
+        return paused;
+    }
+
+    /**
+     * Играет плейлист. shuffle - перемешать, start - с какого трека, repeatOne - повторять выбранный трек без конца
+     * (иначе после него идёт следующий по кругу).
+     */
+    public static synchronized void play(List<Path> tracks, boolean shuffle, @Nullable Path start, boolean repeatOne) {
+        stop();
+        if (tracks.isEmpty()) {
+            return;
+        }
+        stop = false;
+        paused = false;
+        cmd = 0;
+        loopOne = repeatOne;
+        List<Path> list = new ArrayList<>(tracks);
+        if (shuffle) {
+            Collections.shuffle(list);
+        }
+        int startIndex = Math.max(0, start == null ? 0 : list.indexOf(start));
+        Thread t = new Thread(() -> run(list, startIndex), "AIFriend-Music");
+        t.setDaemon(true);
+        thread = t;
+        t.start();
+    }
+
+    public static synchronized void stop() {
+        stop = true;
+        Thread t = thread;
+        if (t != null) {
+            t.interrupt();
+        }
+        thread = null;
+        current = "";
+    }
+
+    public static void togglePause() {
+        paused = !paused;
+    }
+
+    public static void next() {
+        cmd = 1;
+    }
+
+    public static void previous() {
+        cmd = -1;
+    }
+
+    public static void toggleLoop() {
+        loopOne = !loopOne;
+    }
+
+    private static void run(List<Path> tracks, int startIndex) {
+        try {
+            int n = tracks.size();
+            int i = startIndex % n;
+            while (!stop) {
+                playOne(tracks.get(i));
+                if (stop) {
+                    return;
+                }
+                int c = cmd;
+                cmd = 0;
+                if (c > 0) {
+                    i = (i + 1) % n;
+                } else if (c < 0) {
+                    i = (i - 1 + n) % n;
+                } else if (!loopOne) {
+                    i = (i + 1) % n;
+                } // иначе тот же трек ещё раз
+            }
+        } catch (Exception e) {
+            AiFriendMod.LOGGER.warn("AI Friend: music playback failed: {}", e.toString());
+        } finally {
+            if (Thread.currentThread() == thread) {
+                thread = null;
+                current = "";
+                Minecraft.getInstance().execute(MusicPlayer::hide);
+            }
+        }
+    }
+
+    private static void playOne(Path file) {
+        Track track;
+        try {
+            track = decode(file);
+        } catch (Exception e) {
+            AiFriendMod.LOGGER.warn("AI Friend: cannot read track '{}': {}", file.getFileName(), e.toString());
+            stop = true;
+            return;
+        }
+        String title = MusicCatalog.title(file);
+        current = title;
+        Path cover = MusicCatalog.cover(file);
+        Minecraft.getInstance().execute(() -> MusicPlayer.showLocal(title, cover));
+
+        String device = VoiceSettings.get().outputDevice;
+        Mixer mixer = Speaker.findMixer(device);
+        SourceDataLine line = Speaker.tryOpen(mixer, track.rate, null);
+        if (line == null && mixer != null) {
+            line = Speaker.tryOpen(null, track.rate, null);
+        }
+        if (line == null) {
+            AiFriendMod.LOGGER.warn("AI Friend: no audio output for music");
+            stop = true;
+            return;
+        }
+        short[] data = track.stereo;
+        AudioFormat fmt = line.getFormat();
+        int rate = (int) fmt.getSampleRate();
+        if (rate != track.rate) {
+            data = Speaker.resample(data, track.rate, rate, 2);
+        }
+        AiFriendMod.LOGGER.info("AI Friend: playing '{}' at {} Hz", title, rate);
+        line.start();
+        try {
+            int frames = rate / 25; // 40 мс
+            byte[] buf = new byte[frames * 4];
+            float gain = 1.0F;
+            for (int pos = 0; pos + 1 < data.length && !stop && cmd == 0; pos += frames * 2) {
+                while (paused && !stop && cmd == 0) {
+                    line.stop();
+                    Thread.sleep(80);
+                }
+                line.start();
+                float target = (float) VoiceSettings.get().musicVolume * (VoiceManager.botSpeaking() ? 0.3F : 1.0F);
+                gain += (target - gain) * 0.25F; // плавно, без щелчков
+                int n = Math.min(frames * 2, data.length - pos);
+                for (int i = 0; i < n; i++) {
+                    int v = Math.max(-32768, Math.min(32767, Math.round(data[pos + i] * gain)));
+                    buf[2 * i] = (byte) v;
+                    buf[2 * i + 1] = (byte) (v >> 8);
+                }
+                line.write(buf, 0, n * 2);
+            }
+            if (!stop && cmd == 0) {
+                line.drain();
+            }
+        } catch (InterruptedException e) {
+            // остановили
+        } finally {
+            line.stop();
+            line.close();
+        }
+    }
+
+    private record Track(short[] stereo, int rate) {
+    }
+
+    private static Track decode(Path file) throws Exception {
+        String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (name.endsWith(".wav")) {
+            WavDecoder.Pcm pcm = WavDecoder.decode(Files.readAllBytes(file));
+            short[] mono = pcm.samples();
+            short[] st = new short[mono.length * 2];
+            for (int i = 0; i < mono.length; i++) {
+                st[2 * i] = mono[i];
+                st[2 * i + 1] = mono[i];
+            }
+            return limit(new Track(st, pcm.sampleRate()));
+        }
+        try (InputStream in = Files.newInputStream(file); OggAudioStream ogg = new OggAudioStream(in)) {
+            AudioFormat f = ogg.getFormat();
+            ByteBuffer bb = ogg.readAll();
+            bb.order(ByteOrder.LITTLE_ENDIAN);
+            int count = bb.remaining() / 2;
+            short[] raw = new short[count];
+            bb.asShortBuffer().get(raw);
+            int ch = f.getChannels();
+            short[] st;
+            if (ch == 2) {
+                st = raw;
+            } else {
+                st = new short[count * 2];
+                for (int i = 0; i < count; i++) {
+                    st[2 * i] = raw[i];
+                    st[2 * i + 1] = raw[i];
+                }
+            }
+            return limit(new Track(st, (int) f.getSampleRate()));
+        }
+    }
+
+    private static Track limit(Track t) {
+        int max = MAX_SECONDS * t.rate * 2;
+        return t.stereo.length > max ? new Track(java.util.Arrays.copyOf(t.stereo, max), t.rate) : t;
+    }
+}

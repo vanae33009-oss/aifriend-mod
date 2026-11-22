@@ -36,6 +36,11 @@ public final class VoiceManager {
 
     private static final Speaker SPEAKER = new Speaker();
 
+    /** Бот сейчас говорит (для приглушения музыки). */
+    public static boolean botSpeaking() {
+        return SPEAKER.isBusy();
+    }
+
     private static Thread captureThread;
     private static volatile boolean captureRun;
     private static volatile int captureGen;

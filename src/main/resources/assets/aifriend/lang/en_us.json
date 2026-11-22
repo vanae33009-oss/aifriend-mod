@@ -53,5 +53,21 @@
   "aifriend.note.skins": "Own skins: 64x64 png in %s (name ending in 'slim' = thin arms)",
   "aifriend.field.auto_spawn": "Joins the world automatically",
   "aifriend.field.debug": "Debug: show bot actions in chat",
-  "aifriend.field.output_device": "Output device"
+  "aifriend.field.output_device": "Output device",
+  "aifriend.field.music": "Music on request",
+  "aifriend.field.music_service": "Default music service",
+  "aifriend.music.service.spotify": "Spotify",
+  "aifriend.music.service.yandex": "Yandex Music",
+  "aifriend.music.service.youtube": "YouTube",
+  "aifriend.music.blocked": "The Friend suggested music, but that link is not Spotify, Yandex Music or YouTube, so it was not opened.",
+  "aifriend.field.backstory": "Backstory",
+  "aifriend.note.story": "Put a long story or prompt in %s (UTF-8); it is read on every request.",
+  "key.aifriend.player": "Pause/resume record",
+  "aifriend.field.music_volume": "Music volume: %s%%",
+  "aifriend.music.no_files": "The music folder is empty. Put .ogg or .wav files in: %s",
+  "aifriend.music.no_file": "No such track: %s (list: /aimusic list)",
+  "key.aifriend.music_prev": "Music: previous track",
+  "key.aifriend.music_next": "Music: next track",
+  "key.aifriend.music_stop": "Music: stop",
+  "key.aifriend.music_loop": "Music: repeat track"
 }

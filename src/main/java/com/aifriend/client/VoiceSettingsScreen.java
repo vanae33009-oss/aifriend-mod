@@ -97,7 +97,11 @@ public class VoiceSettingsScreen extends BaseSettingsScreen {
                 .withInitialValue(outCurrent)
                 .create(left, row(5), WIDTH, 20, Component.translatable("aifriend.field.output_device"), (btn, value) -> data.outputDevice = value));
 
-        addNote(6, Component.translatable("aifriend.note.talk_key", AiFriendClient.TALK.getTranslatedKeyMessage()), 0x808080);
+        addSlider(6, data.musicVolume,
+                v -> Component.translatable("aifriend.field.music_volume", Math.round(v * 100)),
+                v -> data.musicVolume = v);
+
+        addNote(7, Component.translatable("aifriend.note.talk_key", AiFriendClient.TALK.getTranslatedKeyMessage()), 0x808080);
     }
 
     // ------------------------------------------------------------------ вкладка «Озвучка»

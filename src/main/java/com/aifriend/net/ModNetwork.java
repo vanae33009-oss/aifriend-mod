@@ -25,6 +25,7 @@ public final class ModNetwork {
         PayloadRegistrar registrar = event.registrar("1");
         registrar.playToServer(VoiceTextPayload.TYPE, VoiceTextPayload.CODEC, ModNetwork::onVoiceText);
         registrar.playToClient(SpeakPayload.TYPE, SpeakPayload.CODEC, ModNetwork::onSpeak);
+        registrar.playToClient(MusicPayload.TYPE, MusicPayload.CODEC, ModNetwork::onMusic);
     }
 
     private static void onVoiceText(VoiceTextPayload payload, IPayloadContext context) {
@@ -37,6 +38,14 @@ public final class ModNetwork {
                 // Показываем игроку, что именно распознано (удобно ловить ошибки распознавания).
                 player.sendSystemMessage(Component.literal("[mic] " + text).withStyle(ChatFormatting.GRAY));
                 FriendChat.route(player, text);
+            }
+        });
+    }
+
+    private static void onMusic(MusicPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (FMLEnvironment.dist == Dist.CLIENT) {
+                com.aifriend.client.MusicLinks.handle(payload.query());
             }
         });
     }

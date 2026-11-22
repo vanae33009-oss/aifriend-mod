@@ -124,7 +124,7 @@ final class Speaker {
 
     /** Пробует открыть линию на частоте озвучки, затем на 48 и 44,1 кГц. Возвращает null, если не вышло. */
     @Nullable
-    private static SourceDataLine tryOpen(@Nullable Mixer mixer, int voiceRate, short[] samples) {
+    static SourceDataLine tryOpen(@Nullable Mixer mixer, int voiceRate, @Nullable short[] samples) {
         for (int candidate : new int[] { voiceRate, 48_000, 44_100 }) {
             try {
                 AudioFormat f = new AudioFormat(candidate, 16, 2, true, false);
@@ -140,7 +140,7 @@ final class Speaker {
     }
 
     @Nullable
-    private static Mixer findMixer(String name) {
+    static Mixer findMixer(String name) {
         if (name == null || name.isBlank()) {
             return null;
         }
@@ -152,7 +152,25 @@ final class Speaker {
         return null; // устройство больше не подключено: играем на системном
     }
 
-    private static short[] resample(short[] in, int from, int to) {
+    /** Пересчёт чередующихся каналов (frameLen значений на кадр) из from в to. */
+    static short[] resample(short[] in, int from, int to, int channels) {
+        int frames = in.length / channels;
+        int n = (int) ((long) frames * to / from);
+        short[] out = new short[n * channels];
+        double ratio = (double) from / to;
+        for (int i = 0; i < n; i++) {
+            double pos = i * ratio;
+            int i0 = Math.min(frames - 1, (int) pos);
+            int i1 = Math.min(frames - 1, i0 + 1);
+            double frac = pos - i0;
+            for (int c = 0; c < channels; c++) {
+                out[i * channels + c] = (short) Math.round(in[i0 * channels + c] * (1 - frac) + in[i1 * channels + c] * frac);
+            }
+        }
+        return out;
+    }
+
+    static short[] resample(short[] in, int from, int to) {
         int n = (int) ((long) in.length * to / from);
         short[] out = new short[n];
         double ratio = (double) from / to;

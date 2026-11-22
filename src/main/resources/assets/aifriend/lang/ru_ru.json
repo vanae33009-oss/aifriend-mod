@@ -53,5 +53,21 @@
   "aifriend.note.skins": "Свои скины: png 64x64 в %s (имя на «slim» = тонкие руки)",
   "aifriend.field.auto_spawn": "Появляется сам при входе в мир",
   "aifriend.field.debug": "Отладка: действия бота в чате",
-  "aifriend.field.output_device": "Устройство вывода"
+  "aifriend.field.output_device": "Устройство вывода",
+  "aifriend.field.music": "Музыка по просьбе бота",
+  "aifriend.field.music_service": "Сервис по умолчанию",
+  "aifriend.music.service.spotify": "Spotify",
+  "aifriend.music.service.yandex": "Яндекс Музыка",
+  "aifriend.music.service.youtube": "YouTube",
+  "aifriend.music.blocked": "Бот предложил музыку, но эта ссылка не с Spotify, Яндекс Музыки или YouTube, поэтому не открыта.",
+  "aifriend.field.backstory": "История",
+  "aifriend.note.story": "Длинную историю или промт положи в %s (UTF-8), он читается при каждом запросе.",
+  "key.aifriend.player": "Остановить/запустить пластинку",
+  "aifriend.field.music_volume": "Громкость музыки: %s%%",
+  "aifriend.music.no_files": "Папка с музыкой пуста. Положи сюда файлы .ogg или .wav: %s",
+  "aifriend.music.no_file": "Нет такого трека: %s (список: /aimusic list)",
+  "key.aifriend.music_prev": "Музыка: предыдущий трек",
+  "key.aifriend.music_next": "Музыка: следующий трек",
+  "key.aifriend.music_stop": "Музыка: стоп",
+  "key.aifriend.music_loop": "Музыка: повтор трека"
 }

@@ -120,7 +120,9 @@ public class AiSettingsScreen extends BaseSettingsScreen {
                 .withInitialValue(current)
                 .create(left, row(3), WIDTH, 20, Component.translatable("aifriend.field.skin"), (btn, value) -> data.botSkin = value));
 
-        addNote(4, Component.translatable("aifriend.note.skins", "config/aifriend/skins"), 0x808080);
+        addField(4, "aifriend.field.backstory", data.backstory, 600, false, v -> data.backstory = v, "who he is, his past, goals...");
+        addNote(5, Component.translatable("aifriend.note.story", "config/aifriend/story.txt"), 0x808080);
+        addNote(6, Component.translatable("aifriend.note.skins", "config/aifriend/skins"), 0x808080);
     }
 
     private void buildBehavior() {
@@ -144,6 +146,15 @@ public class AiSettingsScreen extends BaseSettingsScreen {
 
         addRenderableWidget(CycleButton.onOffBuilder(data.debugMessages)
                 .create(left, row(5), WIDTH, 20, Component.translatable("aifriend.field.debug"), (btn, value) -> data.debugMessages = value));
+
+        addRenderableWidget(CycleButton.onOffBuilder(data.musicEnabled)
+                .create(left, row(6), WIDTH, 20, Component.translatable("aifriend.field.music"), (btn, value) -> data.musicEnabled = value));
+
+        java.util.List<String> services = java.util.List.of("spotify", "yandex", "youtube");
+        addRenderableWidget(CycleButton.builder((String s) -> Component.translatable("aifriend.music.service." + s))
+                .withValues(services)
+                .withInitialValue(services.contains(data.musicService) ? data.musicService : "spotify")
+                .create(left, row(7), WIDTH, 20, Component.translatable("aifriend.field.music_service"), (btn, value) -> data.musicService = value));
     }
 
     private void runTest() {

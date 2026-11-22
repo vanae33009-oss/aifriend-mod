@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -70,6 +72,20 @@ public class FriendCollectGoal extends Goal {
     private int veinBonus;
     private boolean pendingFinish;
 
+    // Туннель к руде, до которой нельзя дойти по поверхности: настоящий игрок просто прокапывается.
+    private static final int MAX_TUNNEL_DIST = 28;
+    private static final int MAX_TUNNEL_TICKS = 2400;
+    private final List<BlockPos> buried = new ArrayList<>();
+    private final Set<Long> tunnelBad = new HashSet<>();
+    @Nullable
+    private BlockPos tunnelOre;
+    @Nullable
+    private BlockPos tunnelNext;
+    private boolean intermediate;
+    private int tunnelTicks;
+    private int tunnelMoveTicks;
+    private boolean sawNoTool;
+
     public FriendCollectGoal(FriendEntity friend) {
         this.friend = friend;
         setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
@@ -80,6 +96,9 @@ public class FriendCollectGoal extends Goal {
         if (friend.getTask() != FriendEntity.Task.COLLECT || friend.getCollectRemaining() <= 0) {
             searchLegs = 0;
             veinBonus = 0;
+            buried.clear();
+            tunnelBad.clear();
+            sawNoTool = false;
             return false;
         }
         if (--scanCooldown > 0) {
@@ -99,6 +118,16 @@ public class FriendCollectGoal extends Goal {
             setTarget(found);
             return true;
         }
+        // Руда видна, но закрыта камнем: прокапываемся к ней.
+        BlockPos hidden = pickBuried();
+        if (hidden != null) {
+            tunnelOre = hidden;
+            tunnelNext = null;
+            tunnelTicks = 0;
+            failedScans = 0;
+            searchLegs = 0;
+            return true;
+        }
         // Рядом ничего нет: идём искать дальше.
         if (searchLegs < MAX_SEARCH_LEGS) {
             BlockPos s = pickSearchTarget();
@@ -113,6 +142,10 @@ public class FriendCollectGoal extends Goal {
         if (++failedScans >= 3) {
             failedScans = 0;
             searchLegs = 0;
+            if (sawNoTool) {
+                friend.collectHint = "The block is there, but your pickaxe is too weak for it (iron, copper and lapis need a stone pickaxe; "
+                        + "gold, redstone and diamond need an iron pickaxe). Get the right pickaxe first: gather iron, smelt it, craft it.";
+            }
             friend.finishCollect(false);
         }
         return false;
@@ -120,7 +153,7 @@ public class FriendCollectGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        return friend.getTask() == FriendEntity.Task.COLLECT && (target != null || collectWait > 0 || searchTarget != null);
+        return friend.getTask() == FriendEntity.Task.COLLECT && (target != null || collectWait > 0 || searchTarget != null || tunnelOre != null);
     }
 
     @Override
@@ -145,6 +178,9 @@ public class FriendCollectGoal extends Goal {
         searchTarget = null;
         collectWait = 0;
         progress = 0;
+        tunnelOre = null;
+        tunnelNext = null;
+        intermediate = false;
         if (friend.getTask() != FriendEntity.Task.COLLECT) {
             searchLegs = 0;
         }
@@ -172,16 +208,19 @@ public class FriendCollectGoal extends Goal {
 
         // Фаза поиска: идём в сторону, периодически осматриваясь.
         if (target == null) {
-            if (searchTarget != null) {
+            if (tunnelOre != null) {
+                tunnelStep();
+            } else if (searchTarget != null) {
                 searchStep();
             }
             return;
         }
 
         BlockState state = level.getBlockState(target);
-        if (state.isAir() || !friend.isCollectTarget(state)) {
+        if (state.isAir() || (!intermediate && !friend.isCollectTarget(state))) {
             fx.clear(friend);
             target = null; // уже сломан или изменился
+            intermediate = false;
             progress = 0;
             return;
         }
@@ -192,6 +231,10 @@ public class FriendCollectGoal extends Goal {
         if (!canMineFromHere(center)) {
             fx.clear(friend);
             progress = 0;
+            if (intermediate) {
+                abortTunnel();
+                return;
+            }
             if (walkTicks++ % 10 == 0) {
                 BlockPos stand = findStandPos(target);
                 if (stand == null || !friend.getNavigation().moveTo(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5, 1.0)) {
@@ -307,6 +350,13 @@ public class FriendCollectGoal extends Goal {
             Block.dropResources(state, level, target, level.getBlockEntity(target), friend, tool);
         }
         level.destroyBlock(target, false, friend);
+        if (intermediate) { // блок туннеля: просто прокопали, в счёт задачи не идёт
+            intermediate = false;
+            target = null;
+            progress = 0;
+            walkTicks = 0;
+            return;
+        }
         lootPos = target;
         collectWait = 16;
         target = null;
@@ -377,7 +427,11 @@ public class FriendCollectGoal extends Goal {
             if (s.isAir() || !friend.isCollectTarget(s) || level.getBlockEntity(p) != null) {
                 continue;
             }
-            if (s.getDestroySpeed(level, p) < 0 || !friend.canHarvest(s)) {
+            if (s.getDestroySpeed(level, p) < 0) {
+                continue;
+            }
+            if (!friend.canHarvest(s)) {
+                sawNoTool = true;
                 continue;
             }
             candidates.add(p.immutable());
@@ -400,8 +454,186 @@ public class FriendCollectGoal extends Goal {
                 return p;
             }
             blacklist(p);
+            if (isRock(level.getBlockState(p)) && !buried.contains(p) && buried.size() < 64) {
+                buried.add(p.immutable());
+            }
         }
         return null;
+    }
+
+    private static boolean isRock(BlockState s) {
+        String n = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(s.getBlock()).getPath();
+        return n.endsWith("_ore") || n.equals("stone") || n.equals("cobblestone") || n.contains("deepslate");
+    }
+
+    /** Ближайшая закрытая руда, к которой есть смысл прокапываться. */
+    @Nullable
+    private BlockPos pickBuried() {
+        Level level = friend.level();
+        BlockPos best = null;
+        double bd = MAX_TUNNEL_DIST * MAX_TUNNEL_DIST;
+        for (BlockPos p : buried) {
+            if (tunnelBad.contains(p.asLong())) {
+                continue;
+            }
+            BlockState s = level.getBlockState(p);
+            if (s.isAir() || !friend.isCollectTarget(s)) {
+                continue;
+            }
+            double d = friend.distanceToSqr(Vec3.atCenterOf(p));
+            if (d < bd) {
+                bd = d;
+                best = p;
+            }
+        }
+        return best;
+    }
+
+    private void abortTunnel() {
+        fx.clear(friend);
+        if (tunnelOre != null) {
+            tunnelBad.add(tunnelOre.asLong());
+            blacklist(tunnelOre);
+        }
+        tunnelOre = null;
+        tunnelNext = null;
+        target = null;
+        intermediate = false;
+        progress = 0;
+        friend.getNavigation().stop();
+    }
+
+    private boolean tunnelDanger(Level level, BlockPos c) {
+        BlockState s = level.getBlockState(c);
+        for (Direction dir : Direction.values()) {
+            if (!level.getBlockState(c.relative(dir)).getFluidState().isEmpty()) {
+                return true;
+            }
+        }
+        if (!s.getFluidState().isEmpty() || level.getBlockEntity(c) != null) {
+            return true;
+        }
+        if (level.getBlockState(c.above()).getBlock() instanceof net.minecraft.world.level.block.FallingBlock) {
+            return true; // песок и гравий над головой обрушатся
+        }
+        if (s.isAir() || s.getCollisionShape(level, c).isEmpty()) {
+            return false;
+        }
+        return s.getDestroySpeed(level, c) < 0 || !friend.canHarvest(s) || !Natural.isNatural(level, c, s);
+    }
+
+    /** Один шаг прокапывания к руде: ступенька вниз/вверх/вбок, 2 блока высотой. */
+    private void tunnelStep() {
+        Level level = friend.level();
+        BlockPos ore = tunnelOre;
+        if (ore == null) {
+            return;
+        }
+        BlockState os = level.getBlockState(ore);
+        if (os.isAir() || !friend.isCollectTarget(os)) {
+            tunnelOre = null;
+            tunnelNext = null;
+            return;
+        }
+        if (++tunnelTicks > MAX_TUNNEL_TICKS) {
+            abortTunnel();
+            return;
+        }
+        // Дошли: руду уже видно и можно достать.
+        target = ore;
+        if (canMineFromHere(Vec3.atCenterOf(ore))) {
+            tunnelOre = null;
+            tunnelNext = null;
+            blacklist.clear(); // жилу, до которой теперь можно дойти, снова можно брать целиком
+            buried.clear();
+            setTarget(ore);
+            return;
+        }
+        target = null;
+
+        if (tunnelNext != null) { // идём в только что прокопанную клетку
+            BlockPos n = tunnelNext;
+            double dh = Math.hypot(friend.getX() - (n.getX() + 0.5), friend.getZ() - (n.getZ() + 0.5));
+            if (dh < 0.6 && Math.abs(friend.getY() - n.getY()) < 1.2) {
+                tunnelNext = null;
+                return;
+            }
+            if (tunnelMoveTicks++ % 10 == 0) {
+                friend.getNavigation().moveTo(n.getX() + 0.5, n.getY(), n.getZ() + 0.5, 1.0);
+            }
+            if (tunnelMoveTicks > 80) {
+                abortTunnel();
+            }
+            return;
+        }
+
+        BlockPos b = friend.blockPosition();
+        int dx = ore.getX() - b.getX();
+        int dy = ore.getY() - b.getY();
+        int dz = ore.getZ() - b.getZ();
+        Direction h = null;
+        if (dx != 0 && (Math.abs(dx) >= Math.abs(dz) || dz == 0)) {
+            h = dx > 0 ? Direction.EAST : Direction.WEST;
+        } else if (dz != 0) {
+            h = dz > 0 ? Direction.SOUTH : Direction.NORTH;
+        }
+        List<BlockPos> clear = new ArrayList<>();
+        BlockPos next;
+        if (h == null) {
+            if (dy <= -2) {
+                next = b.below();
+                clear.add(next);
+            } else {
+                abortTunnel(); // руда прямо над головой: так не прокопаться
+                return;
+            }
+        } else {
+            BlockPos hx = b.relative(h);
+            int v = dy >= 2 ? 1 : dy <= -2 ? -1 : 0;
+            next = hx.offset(0, v, 0);
+            if (v == 1) {
+                clear.add(b.above(2));
+                clear.add(next);
+                clear.add(next.above());
+            } else if (v == -1) {
+                clear.add(hx);
+                clear.add(hx.above());
+                clear.add(next);
+            } else {
+                clear.add(hx);
+                clear.add(hx.above());
+            }
+        }
+        // Пол под следующей клеткой: не падаем в пустоту.
+        boolean floor = false;
+        for (int i = 1; i <= 3; i++) {
+            if (!level.getBlockState(next.below(i)).getCollisionShape(level, next.below(i)).isEmpty()) {
+                floor = true;
+                break;
+            }
+        }
+        if (!floor || next.getY() < level.getMinBuildHeight() + 2) {
+            abortTunnel();
+            return;
+        }
+        for (BlockPos c : clear) {
+            if (tunnelDanger(level, c)) {
+                abortTunnel();
+                return;
+            }
+        }
+        for (BlockPos c : clear) {
+            BlockState cs = level.getBlockState(c);
+            if (!cs.isAir() && !cs.getCollisionShape(level, c).isEmpty()) {
+                target = c;
+                intermediate = true;
+                progress = 0;
+                walkTicks = 0;
+                return;
+            }
+        }
+        tunnelNext = next;
+        tunnelMoveTicks = 0;
     }
 
     private boolean isReachable(BlockPos p) {
