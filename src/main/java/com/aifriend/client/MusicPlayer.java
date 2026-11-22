@@ -29,6 +29,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -110,14 +111,50 @@ public final class MusicPlayer {
 
     // ------------------------------------------------------------------ данные
 
+    // Состояние загрузки данных для окна плеера: что происходит или почему не получилось.
+    private static volatile String status = "";
+    private static volatile boolean statusError;
+
+    public static String status() {
+        return status;
+    }
+
+    public static boolean statusIsError() {
+        return statusError;
+    }
+
+    static void setStatus(String text, boolean error) {
+        status = text;
+        statusError = error;
+    }
+
+    private static String brief(Exception e) {
+        String m = e.getMessage();
+        return e.getClass().getSimpleName() + (m == null || m.isBlank() ? "" : ": " + (m.length() > 60 ? m.substring(0, 60) : m));
+    }
+
+    @Nullable
+    private static String youtubeId(String url) {
+        Matcher m = Pattern.compile("(?:v=|youtu\\.be/|/shorts/|/embed/|/live/)([A-Za-z0-9_-]{11})").matcher(url);
+        return m.find() ? m.group(1) : null;
+    }
+
     private static void fetch(String url, String fallback) {
+        String host = "";
         try {
-            String host = URI.create(url).getHost();
-            host = host == null ? "" : host.toLowerCase(Locale.ROOT);
-            String name = null;
-            String author = "";
-            String image = null;
-            boolean youtube = host.contains("youtu");
+            host = URI.create(url).getHost();
+        } catch (IllegalArgumentException ignored) {
+            // ниже просто не найдём сервис
+        }
+        host = host == null ? "" : host.toLowerCase(Locale.ROOT);
+        boolean youtube = host.contains("youtu");
+        String name = null;
+        String author = "";
+        String image = null;
+        String problem = null;
+        setStatus(Component.translatable("aifriend.player.status.loading").getString(), false);
+        AiFriendMod.LOGGER.info("AI Friend: looking up track info for {}", url);
+        try {
             if (youtube || host.contains("spotify")) {
                 String api = youtube ? "https://www.youtube.com/oembed?format=json&url=" : "https://open.spotify.com/oembed?url=";
                 JsonObject o = JsonParser.parseString(get(api + URLEncoder.encode(url, StandardCharsets.UTF_8))).getAsJsonObject();
@@ -135,24 +172,50 @@ public final class MusicPlayer {
                     }
                 }
             }
-            String finalName = name == null || name.isBlank() ? fallback : name;
-            String finalAuthor = author == null ? "" : author;
-            Minecraft.getInstance().execute(() -> {
-                if (active) {
-                    title = finalName;
-                    subtitle = finalAuthor;
-                }
-            });
-            if (image != null && imageAllowed(image)) {
-                byte[] bytes = getBytes(image);
-                BufferedImage src = ImageIO.read(new ByteArrayInputStream(bytes));
-                if (src != null) {
-                    NativeImage circle = circleCrop(src, 96, youtube);
-                    Minecraft.getInstance().execute(() -> setCover(circle));
+        } catch (Exception e) {
+            problem = brief(e);
+            AiFriendMod.LOGGER.warn("AI Friend: could not get track info from {}: {}", host, e.toString());
+        }
+        if ((image == null || image.isBlank()) && youtube) { // картинка у YouTube лежит по прямому адресу
+            String id = youtubeId(url);
+            if (id != null) {
+                image = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg";
+            }
+        }
+        String finalName = name == null || name.isBlank() ? (fallback.equals(url) ? host : fallback) : name;
+        String finalAuthor = author == null ? "" : author;
+        Minecraft.getInstance().execute(() -> {
+            if (active) {
+                title = finalName;
+                subtitle = finalAuthor;
+            }
+        });
+        boolean cover = false;
+        if (image != null && !image.isBlank()) {
+            AiFriendMod.LOGGER.info("AI Friend: cover image {}", image);
+            if (!imageAllowed(image)) {
+                problem = "image host not allowed";
+            } else {
+                try {
+                    byte[] bytes = getBytes(image);
+                    BufferedImage src = ImageIO.read(new ByteArrayInputStream(bytes));
+                    if (src == null) {
+                        problem = "unsupported image format";
+                    } else {
+                        NativeImage circle = circleCrop(src, 96, youtube);
+                        Minecraft.getInstance().execute(() -> setCover(circle));
+                        cover = true;
+                    }
+                } catch (Exception e) {
+                    problem = brief(e);
+                    AiFriendMod.LOGGER.warn("AI Friend: could not load the cover: {}", e.toString());
                 }
             }
-        } catch (Exception e) {
-            AiFriendMod.LOGGER.warn("AI Friend: could not load music info: {}", e.toString());
+        }
+        if (cover) {
+            setStatus(Component.translatable("aifriend.player.status.ok").getString(), false);
+        } else {
+            setStatus(Component.translatable("aifriend.player.status.no_cover", problem == null ? "-" : problem).getString(), true);
         }
     }
 

@@ -268,6 +268,9 @@ public final class MusicStreamer {
             }
             return limit(new Track(st, pcm.sampleRate()));
         }
+        if (name.endsWith(".mp3")) {
+            return decodeMp3(Files.readAllBytes(file));
+        }
         // OGG Vorbis: декодер STB из LWJGL, он входит в Minecraft (внутренние классы игры для этого не используем).
         byte[] bytes = Files.readAllBytes(file);
         ByteBuffer mem = MemoryUtil.memAlloc(bytes.length);
@@ -297,6 +300,50 @@ public final class MusicStreamer {
             }
         } finally {
             MemoryUtil.memFree(mem);
+        }
+    }
+
+    /** MP3 через библиотеку JLayer (LGPL), которая вкладывается в мод. */
+    private static Track decodeMp3(byte[] bytes) throws Exception {
+        try {
+            javazoom.jl.decoder.Bitstream bs = new javazoom.jl.decoder.Bitstream(new java.io.ByteArrayInputStream(bytes));
+            javazoom.jl.decoder.Decoder dec = new javazoom.jl.decoder.Decoder();
+            short[] out = new short[1 << 20];
+            int n = 0;
+            int rate = 0;
+            try {
+                while (true) {
+                    javazoom.jl.decoder.Header h = bs.readFrame();
+                    if (h == null) {
+                        break;
+                    }
+                    javazoom.jl.decoder.SampleBuffer sb = (javazoom.jl.decoder.SampleBuffer) dec.decodeFrame(h, bs);
+                    short[] buf = sb.getBuffer();
+                    int ch = Math.max(1, sb.getChannelCount());
+                    int frames = sb.getBufferLength() / ch;
+                    rate = sb.getSampleFrequency();
+                    if (n + frames * 2 > out.length) {
+                        out = java.util.Arrays.copyOf(out, Math.max(out.length * 2, n + frames * 2));
+                    }
+                    for (int i = 0; i < frames; i++) {
+                        short l = buf[i * ch];
+                        out[n++] = l;
+                        out[n++] = ch > 1 ? buf[i * ch + 1] : l;
+                    }
+                    bs.closeFrame();
+                    if (n >= MAX_SECONDS * rate * 2) {
+                        break;
+                    }
+                }
+            } finally {
+                bs.close();
+            }
+            if (n == 0) {
+                throw new IllegalStateException("no audio found in the MP3 file");
+            }
+            return new Track(java.util.Arrays.copyOf(out, n), rate);
+        } catch (LinkageError e) {
+            throw new IllegalStateException("MP3 support library is missing from this build", e);
         }
     }
 

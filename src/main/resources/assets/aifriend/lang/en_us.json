@@ -64,7 +64,7 @@
   "aifriend.note.story": "Put a long story or prompt in %s (UTF-8); it is read on every request.",
   "key.aifriend.player": "Pause/resume record",
   "aifriend.field.music_volume": "Music volume: %s%%",
-  "aifriend.music.no_files": "The music folder is empty. Put .ogg or .wav files in: %s",
+  "aifriend.music.no_files": "The music folder is empty. Put .mp3, .ogg or .wav files in: %s",
   "aifriend.music.no_file": "No such track: %s (list: /aimusic list)",
   "key.aifriend.music_prev": "Music: previous track",
   "key.aifriend.music_next": "Music: next track",
@@ -76,5 +76,8 @@
   "aifriend.player.url_hint": "Link: Spotify, Yandex Music, YouTube",
   "aifriend.player.idle": "Nothing playing",
   "aifriend.player.folder": "Open the music folder",
-  "aifriend.player.empty": "The folder is empty (.ogg or .wav)"
+  "aifriend.player.empty": "The folder is empty (.mp3, .ogg or .wav)",
+  "aifriend.player.status.loading": "Looking up…",
+  "aifriend.player.status.ok": "Done",
+  "aifriend.player.status.no_cover": "No cover: %s"
 }

@@ -105,7 +105,7 @@ public final class WelcomeScreen extends Screen {
                     + "в мире (около 970 млн) живёт с психическим расстройством, и дружеская компания порой поддерживает. Бот не заменяет врача или специалиста. "
                     + "Я буду дорабатывать его, пока мне будет что в нём улучшать. Сейчас в нём есть:"));
             p.add(t("1. ").withStyle(ChatFormatting.LIGHT_PURPLE).append(t("Музыка: по ссылке Spotify, Яндекс Музыки или YouTube (открывается в браузере, а в игре появляется "
-                    + "пластинка с обложкой), а также из своих файлов .ogg и .wav: положи их в папку «config/aifriend/music», и они заиграют прямо в игре.")));
+                    + "пластинка с обложкой), а также из своих файлов .mp3, .ogg и .wav: положи их в папку «config/aifriend/music», и они заиграют прямо в игре.")));
             p.add(t("2. ").withStyle(ChatFormatting.LIGHT_PURPLE).append(t("Нажми «K»: откроется меню бота. Там подключается API-ключ нейросети и настраиваются голос и озвучка текста.")));
             p.add(t("3. ").withStyle(ChatFormatting.LIGHT_PURPLE).append(t("Можно задать боту личность и поведение: расскажи ему о себе и о том, каким должен быть он сам, "
                     + "чтобы ему было проще подстроиться под тебя и общаться с тобой. Длинную историю можно положить в файл «config/aifriend/story.txt».")));
@@ -121,7 +121,7 @@ public final class WelcomeScreen extends Screen {
                     + "(around 970 million) live with a mental disorder, and friendly company can sometimes help. The bot is not a substitute for a doctor or a professional. "
                     + "I'll keep working on it for as long as there is something to improve. Right now it can do this:"));
             p.add(t("1. ").withStyle(ChatFormatting.LIGHT_PURPLE).append(t("Music: by a Spotify, Yandex Music or YouTube link (opens in your browser, and a record with cover art "
-                    + "appears in the game), or from your own .ogg and .wav files: drop them into \"config/aifriend/music\" and they play right in the game.")));
+                    + "appears in the game), or from your own .mp3, .ogg and .wav files: drop them into \"config/aifriend/music\" and they play right in the game.")));
             p.add(t("2. ").withStyle(ChatFormatting.LIGHT_PURPLE).append(t("Press \"K\" to open the bot menu. There you add your AI API key and set up the voice and text-to-speech.")));
             p.add(t("3. ").withStyle(ChatFormatting.LIGHT_PURPLE).append(t("You can give the bot a personality and behaviour: tell it about yourself and what it should be like, "
                     + "so it can adapt to you and talk to you more easily. A longer backstory can go into the file \"config/aifriend/story.txt\".")));

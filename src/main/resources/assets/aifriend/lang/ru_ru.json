@@ -64,7 +64,7 @@
   "aifriend.note.story": "Длинную историю или промт положи в %s (UTF-8), он читается при каждом запросе.",
   "key.aifriend.player": "Остановить/запустить пластинку",
   "aifriend.field.music_volume": "Громкость музыки: %s%%",
-  "aifriend.music.no_files": "Папка с музыкой пуста. Положи сюда файлы .ogg или .wav: %s",
+  "aifriend.music.no_files": "Папка с музыкой пуста. Положи сюда файлы .mp3, .ogg или .wav: %s",
   "aifriend.music.no_file": "Нет такого трека: %s (список: /aimusic list)",
   "key.aifriend.music_prev": "Музыка: предыдущий трек",
   "key.aifriend.music_next": "Музыка: следующий трек",
@@ -76,5 +76,8 @@
   "aifriend.player.url_hint": "Ссылка: Spotify, Яндекс Музыка, YouTube",
   "aifriend.player.idle": "Ничего не играет",
   "aifriend.player.folder": "Открыть папку с музыкой",
-  "aifriend.player.empty": "В папке пусто (.ogg или .wav)"
+  "aifriend.player.empty": "В папке пусто (.mp3, .ogg или .wav)",
+  "aifriend.player.status.loading": "Ищу данные…",
+  "aifriend.player.status.ok": "Готово",
+  "aifriend.player.status.no_cover": "Без обложки: %s"
 }

@@ -30,7 +30,7 @@ He isn't an all-knowing command executor. He only knows what a player would know
 - Choose your microphone and your audio output device; his voice is spatial (louder and panned by where he stands) and only plays when he is near.
 
 **Music on request**
-- Drop your own `.ogg` / `.wav` files into `config/aifriend/music` and ask him to play them: the music plays inside the game (shared with nearby players who have the same file), ducks while he talks, and a vinyl record with the cover art spins on the side of your screen.
+- Drop your own `.mp3` / `.ogg` / `.wav` files into `config/aifriend/music` and ask him to play them: the music plays inside the game (shared with nearby players who have the same file), ducks while he talks, and a vinyl record with the cover art spins on the side of your screen.
 - Ask "put on some music" or hand him a link: he opens Spotify, Yandex Music or YouTube in your browser or app (after you confirm). The mod itself never downloads or rips audio.
 
 **Your keys, your choice of AI**
@@ -48,6 +48,8 @@ He isn't an all-knowing command executor. He only knows what a player would know
 `/friend spawn [name]` · `/friend dismiss` · `/friend name <name>` · `/friend gender male|female` · `/friend skin <id>|list` · `/friend status` · `/friend reload`
 
 ## Good to know
+
+- MP3 playback uses the open-source JLayer decoder (LGPL 2.1), bundled via Jar-in-Jar.
 
 - You need your own API key for an AI provider (and optionally for a voice service). Those services are billed by their providers, not by the mod.
 - Works in single player and over LAN. On LAN, the host's key is used for the AI.

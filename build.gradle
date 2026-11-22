@@ -115,7 +115,17 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
+// MP3: декодер JLayer (LGPL 2.1) вкладывается в мод (Jar-in-Jar).
+jarJar.enable()
+
 dependencies {
+    jarJar(implementation("com.googlecode.soundlibs:jlayer")) {
+        version {
+            strictly '[1.0.1.4,1.1)'
+            prefer '1.0.1.4'
+        }
+    }
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

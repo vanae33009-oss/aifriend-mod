@@ -42,6 +42,14 @@ public final class MusicLinks {
 
     /** back - экран, на который вернуться после окна подтверждения (например плеер). */
     public static void handle(String query, @Nullable net.minecraft.client.gui.screens.Screen back) {
+        handle(query, back, false);
+    }
+
+    /**
+     * user - игрок сам ввёл ссылку в плеере: открываем сразу, без окна подтверждения и без паузы между запросами,
+     * и показываем в плеере, что получилось. Если просит бот, сначала спрашиваем подтверждение.
+     */
+    public static void handle(String query, @Nullable net.minecraft.client.gui.screens.Screen back, boolean user) {
         Minecraft mc = Minecraft.getInstance();
         if (!AiSettings.get().musicEnabled || query == null || query.isBlank()) {
             return;
@@ -100,11 +108,12 @@ public final class MusicLinks {
         }
         query = query.trim().replaceAll("[\\s.,;)]+$", "");
         long now = System.currentTimeMillis();
-        if (now - lastOpenMs < 8000 || mc.screen instanceof ConfirmLinkScreen) {
+        if (!user && (now - lastOpenMs < 8000 || mc.screen instanceof ConfirmLinkScreen)) {
             return; // не заваливаем игрока окнами
         }
         String url = resolve(query.trim());
         if (url == null) {
+            MusicPlayer.setStatus(Component.translatable("aifriend.music.blocked").getString(), true);
             if (mc.player != null) {
                 mc.player.displayClientMessage(Component.translatable("aifriend.music.blocked").withStyle(ChatFormatting.GRAY), false);
             }
@@ -114,6 +123,11 @@ public final class MusicLinks {
         final boolean isLink = query.toLowerCase(Locale.ROOT).startsWith("http");
         final String shownTitle = isLink ? "" : titleOf(query);
         final String linkForInfo = isLink ? url : null;
+        if (user) {
+            Util.getPlatform().openUri(url);
+            MusicPlayer.show(shownTitle.isEmpty() ? url : shownTitle, linkForInfo);
+            return;
+        }
         mc.execute(() -> mc.setScreen(new ConfirmLinkScreen(yes -> {
             if (yes) {
                 Util.getPlatform().openUri(url);

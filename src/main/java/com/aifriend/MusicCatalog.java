@@ -10,7 +10,7 @@ import java.util.stream.Stream;
 
 import net.neoforged.fml.loading.FMLPaths;
 
-/** Твоя музыка для игры: файлы .ogg и .wav в config/aifriend/music. */
+/** Твоя музыка для игры: файлы .mp3, .ogg и .wav в config/aifriend/music. */
 public final class MusicCatalog {
     private MusicCatalog() {
     }
@@ -29,7 +29,7 @@ public final class MusicCatalog {
 
     public static boolean isTrack(Path p) {
         String n = p.getFileName().toString().toLowerCase(Locale.ROOT);
-        return n.endsWith(".ogg") || n.endsWith(".wav");
+        return n.endsWith(".ogg") || n.endsWith(".wav") || n.endsWith(".mp3");
     }
 
     /** Все треки, по имени. */

@@ -51,8 +51,8 @@ public final class PlayerScreen extends Screen {
     @Override
     protected void init() {
         int avail = height - 8;
-        d = Mth.clamp(avail - 158, 56, 100);
-        h = d + 158;
+        d = Mth.clamp(avail - 172, 56, 100);
+        h = d + 172;
         x0 = width - W - 8;
         y0 = Math.max(4, (height - h) / 2);
         progY = y0 + 28 + d + 32;
@@ -147,6 +147,10 @@ public final class PlayerScreen extends Screen {
         g.fill(vk - 2, volY - 2, vk + 3, volY + 4, 0xFFE6E6E6);
 
         // строка ссылки и папка
+        String st = MusicPlayer.status();
+        if (!st.isEmpty()) {
+            g.drawString(font, font.plainSubstrByWidth(st, W - 24), x0 + 12, urlY + 23, MusicPlayer.statusIsError() ? 0xFFE0A060 : 0xFF8AC08A, false);
+        }
         icFolder(g, x0 + W - 21, urlY + 3, MusicLinkHover(mx, my) ? GREEN : ICON);
         super.render(g, mx, my, pt);
 
@@ -344,7 +348,7 @@ public final class PlayerScreen extends Screen {
         if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && url.isFocused()) {
             String q = url.getValue().trim();
             if (!q.isEmpty()) {
-                MusicLinks.handle(q, this);
+                MusicLinks.handle(q, this, true);
                 url.setValue("");
             }
             return true;
