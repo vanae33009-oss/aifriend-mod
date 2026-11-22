@@ -37,6 +37,11 @@ public final class MusicLinks {
     }
 
     public static void handle(String query) {
+        handle(query, null);
+    }
+
+    /** back - экран, на который вернуться после окна подтверждения (например плеер). */
+    public static void handle(String query, @Nullable net.minecraft.client.gui.screens.Screen back) {
         Minecraft mc = Minecraft.getInstance();
         if (!AiSettings.get().musicEnabled || query == null || query.isBlank()) {
             return;
@@ -114,7 +119,7 @@ public final class MusicLinks {
                 Util.getPlatform().openUri(url);
                 MusicPlayer.show(shownTitle.isEmpty() ? url : shownTitle, linkForInfo);
             }
-            mc.setScreen(null);
+            mc.setScreen(back);
         }, url, true)));
     }
 

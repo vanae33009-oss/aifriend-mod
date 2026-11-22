@@ -69,5 +69,12 @@
   "key.aifriend.music_prev": "Music: previous track",
   "key.aifriend.music_next": "Music: next track",
   "key.aifriend.music_stop": "Music: stop",
-  "key.aifriend.music_loop": "Music: repeat track"
+  "key.aifriend.music_loop": "Music: repeat track",
+  "key.aifriend.open_player": "Open player",
+  "aifriend.player.title": "Player",
+  "aifriend.player.url": "Link",
+  "aifriend.player.url_hint": "Link: Spotify, Yandex Music, YouTube",
+  "aifriend.player.idle": "Nothing playing",
+  "aifriend.player.folder": "Open the music folder",
+  "aifriend.player.empty": "The folder is empty (.ogg or .wav)"
 }

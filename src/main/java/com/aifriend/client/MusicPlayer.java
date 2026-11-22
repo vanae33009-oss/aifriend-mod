@@ -245,32 +245,49 @@ public final class MusicPlayer {
 
     // ------------------------------------------------------------------ отрисовка
 
-    public static void render(GuiGraphics g, DeltaTracker delta) {
-        Minecraft mc = Minecraft.getInstance();
-        if (!active || mc.options.hideGui) {
-            return;
-        }
+    public static String title() {
+        return title;
+    }
+
+    public static String subtitle() {
+        return subtitle;
+    }
+
+    public static boolean isSpinning() {
+        return spinning;
+    }
+
+    /** Поворачивает пластинку по времени (вызывать раз за кадр). */
+    public static void tickAngle() {
         long now = System.nanoTime();
         if (lastNs != 0 && spinning) {
-            angle = (angle + (now - lastNs) / 1.0e9F * 200.0F) % 360.0F; // ~33 оборота в минуту, как у пластинки
+            angle = (angle + Math.min(0.2F, (now - lastNs) / 1.0e9F) * 200.0F) % 360.0F; // ~33 оборота в минуту, как у пластинки
         }
         lastNs = now;
+    }
 
-        int cx = g.guiWidth() - SIZE / 2 - 10;
-        int cy = g.guiHeight() / 2;
+    /** Пластинка с обложкой в центре. */
+    public static void drawDisc(GuiGraphics g, int cx, int cy, int size) {
         RenderSystem.enableBlend();
         g.pose().pushPose();
         g.pose().translate(cx, cy, 0);
         g.pose().mulPose(Axis.ZP.rotationDegrees(angle));
-        g.blit(VINYL, -SIZE / 2, -SIZE / 2, SIZE, SIZE, 0, 0, 128, 128, 128, 128);
-        int c = (int) (SIZE * 0.5);
-        if (cover != null) {
-            g.blit(cover, -c / 2, -c / 2, c, c, 0, 0, 96, 96, 96, 96);
-        } else {
-            g.blit(DEFAULT_COVER, -c / 2, -c / 2, c, c, 0, 0, 96, 96, 96, 96);
-        }
+        g.blit(VINYL, -size / 2, -size / 2, size, size, 0, 0, 128, 128, 128, 128);
+        int c = (int) (size * 0.5);
+        g.blit(cover != null ? cover : DEFAULT_COVER, -c / 2, -c / 2, c, c, 0, 0, 96, 96, 96, 96);
         g.pose().popPose();
         RenderSystem.disableBlend();
+    }
+
+    public static void render(GuiGraphics g, DeltaTracker delta) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!active || mc.options.hideGui || mc.screen instanceof PlayerScreen) {
+            return;
+        }
+        tickAngle();
+        int cx = g.guiWidth() - SIZE / 2 - 10;
+        int cy = g.guiHeight() / 2;
+        drawDisc(g, cx, cy, SIZE);
 
         Font font = mc.font;
         int right = g.guiWidth() - 6;

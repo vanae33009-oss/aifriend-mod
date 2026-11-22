@@ -69,5 +69,12 @@
   "key.aifriend.music_prev": "Музыка: предыдущий трек",
   "key.aifriend.music_next": "Музыка: следующий трек",
   "key.aifriend.music_stop": "Музыка: стоп",
-  "key.aifriend.music_loop": "Музыка: повтор трека"
+  "key.aifriend.music_loop": "Музыка: повтор трека",
+  "key.aifriend.open_player": "Открыть плеер",
+  "aifriend.player.title": "Плеер",
+  "aifriend.player.url": "Ссылка",
+  "aifriend.player.url_hint": "Ссылка: Spotify, Яндекс Музыка, YouTube",
+  "aifriend.player.idle": "Ничего не играет",
+  "aifriend.player.folder": "Открыть папку с музыкой",
+  "aifriend.player.empty": "В папке пусто (.ogg или .wav)"
 }

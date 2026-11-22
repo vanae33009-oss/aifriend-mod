@@ -41,6 +41,9 @@ public class AiFriendClient {
     public static final KeyMapping MUSIC_LOOP = new KeyMapping("key.aifriend.music_loop",
             InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_APOSTROPHE, "key.categories.aifriend");
 
+    public static final KeyMapping OPEN_PLAYER = new KeyMapping("key.aifriend.open_player",
+            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, "key.categories.aifriend");
+
     public AiFriendClient(ModContainer container) {
         VoiceSettings.load();
         com.aifriend.MusicCatalog.ensureDir();
@@ -62,6 +65,7 @@ public class AiFriendClient {
         event.register(MUSIC_NEXT);
         event.register(MUSIC_STOP);
         event.register(MUSIC_LOOP);
+        event.register(OPEN_PLAYER);
     }
 
     @SubscribeEvent
@@ -85,6 +89,10 @@ public class AiFriendClient {
             return 1;
         }));
         event.getDispatcher().register(net.minecraft.commands.Commands.literal("aimusic")
+                .executes(ctx -> {
+                    Minecraft.getInstance().tell(() -> Minecraft.getInstance().setScreen(new PlayerScreen()));
+                    return 1;
+                })
                 .then(net.minecraft.commands.Commands.argument("query", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
                         .executes(ctx -> {
                             MusicLinks.handle(com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "query"));
@@ -108,6 +116,11 @@ public class AiFriendClient {
         }
         while (PLAYER.consumeClick()) {
             MusicPlayer.toggleSpin();
+        }
+        while (OPEN_PLAYER.consumeClick()) {
+            if (mc.screen == null && mc.level != null) {
+                mc.setScreen(new PlayerScreen());
+            }
         }
         while (MUSIC_PREV.consumeClick()) {
             MusicPlayer.command("prev");

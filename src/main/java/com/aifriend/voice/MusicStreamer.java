@@ -6,7 +6,6 @@ import java.nio.ShortBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -38,6 +37,13 @@ public final class MusicStreamer {
     /** 1 - следующий, -1 - предыдущий, 0 - ничего. */
     private static volatile int cmd;
     private static volatile boolean loopOne;
+    private static volatile boolean shuffleMode;
+    /** Перемотка: доля трека 0..1, -1 - нет. */
+    private static volatile float seekReq = -1;
+    private static volatile long posSamples;
+    private static volatile long totalSamples;
+    private static volatile int outRate = 44100;
+    private static volatile List<Path> playlist = List.of();
     private static volatile String current = "";
 
     private MusicStreamer() {
@@ -60,6 +66,32 @@ public final class MusicStreamer {
         return paused;
     }
 
+    public static boolean isShuffle() {
+        return shuffleMode;
+    }
+
+    public static void toggleShuffle() {
+        shuffleMode = !shuffleMode;
+    }
+
+    public static List<Path> playlist() {
+        return playlist;
+    }
+
+    /** Сколько секунд проиграно (с точностью до буфера). */
+    public static double positionSec() {
+        return posSamples / 2.0 / Math.max(1, outRate);
+    }
+
+    public static double durationSec() {
+        return isPlaying() ? totalSamples / 2.0 / Math.max(1, outRate) : 0.0;
+    }
+
+    /** Перемотать на долю трека (0..1). */
+    public static void seek(float fraction) {
+        seekReq = Math.max(0.0F, Math.min(0.999F, fraction));
+    }
+
     /**
      * Играет плейлист. shuffle - перемешать, start - с какого трека, repeatOne - повторять выбранный трек без конца
      * (иначе после него идёт следующий по кругу).
@@ -73,11 +105,11 @@ public final class MusicStreamer {
         paused = false;
         cmd = 0;
         loopOne = repeatOne;
+        shuffleMode = shuffle;
+        seekReq = -1;
         List<Path> list = new ArrayList<>(tracks);
-        if (shuffle) {
-            Collections.shuffle(list);
-        }
-        int startIndex = Math.max(0, start == null ? 0 : list.indexOf(start));
+        playlist = list;
+        int startIndex = start == null ? (shuffle ? new java.util.Random().nextInt(list.size()) : 0) : Math.max(0, list.indexOf(start));
         Thread t = new Thread(() -> run(list, startIndex), "AIFriend-Music");
         t.setDaemon(true);
         thread = t;
@@ -121,12 +153,11 @@ public final class MusicStreamer {
                 }
                 int c = cmd;
                 cmd = 0;
-                if (c > 0) {
-                    i = (i + 1) % n;
-                } else if (c < 0) {
+                if (c < 0) {
                     i = (i - 1 + n) % n;
-                } else if (!loopOne) {
-                    i = (i + 1) % n;
+                } else if (c > 0 || !loopOne) {
+                    // дальше: по порядку или случайный другой трек, если включено перемешивание
+                    i = shuffleMode && n > 1 ? (i + 1 + new java.util.Random().nextInt(n - 1)) % n : (i + 1) % n;
                 } // иначе тот же трек ещё раз
             }
         } catch (Exception e) {
@@ -177,10 +208,23 @@ public final class MusicStreamer {
             int frames = rate / 25; // 40 мс
             byte[] buf = new byte[frames * 4];
             float gain = 1.0F;
-            for (int pos = 0; pos + 1 < data.length && !stop && cmd == 0; pos += frames * 2) {
-                while (paused && !stop && cmd == 0) {
+            outRate = rate;
+            totalSamples = data.length;
+            posSamples = 0;
+            int pos = 0;
+            while (pos + 1 < data.length && !stop && cmd == 0) {
+                float sr = seekReq;
+                if (sr >= 0) {
+                    seekReq = -1;
+                    pos = ((int) (sr * data.length)) & ~1;
+                    line.flush();
+                }
+                while (paused && !stop && cmd == 0 && seekReq < 0) {
                     line.stop();
                     Thread.sleep(80);
+                }
+                if (seekReq >= 0) {
+                    continue;
                 }
                 line.start();
                 float target = (float) VoiceSettings.get().musicVolume * (VoiceManager.botSpeaking() ? 0.3F : 1.0F);
@@ -192,6 +236,8 @@ public final class MusicStreamer {
                     buf[2 * i + 1] = (byte) (v >> 8);
                 }
                 line.write(buf, 0, n * 2);
+                pos += n;
+                posSamples = pos;
             }
             if (!stop && cmd == 0) {
                 line.drain();
@@ -199,6 +245,9 @@ public final class MusicStreamer {
         } catch (InterruptedException e) {
             // остановили
         } finally {
+            if (stop || cmd != 0) {
+                line.flush();
+            }
             line.stop();
             line.close();
         }
