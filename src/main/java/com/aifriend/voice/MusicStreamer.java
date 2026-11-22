@@ -1,8 +1,8 @@
 package com.aifriend.voice;
 
-import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+import java.nio.ShortBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -19,7 +19,9 @@ import javax.annotation.Nullable;
 import com.aifriend.AiFriendMod;
 import com.aifriend.MusicCatalog;
 import com.aifriend.client.MusicPlayer;
-import com.mojang.blaze3d.audio.OggAudioStream;
+import org.lwjgl.stb.STBVorbis;
+import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 
 import net.minecraft.client.Minecraft;
 
@@ -217,25 +219,35 @@ public final class MusicStreamer {
             }
             return limit(new Track(st, pcm.sampleRate()));
         }
-        try (InputStream in = Files.newInputStream(file); OggAudioStream ogg = new OggAudioStream(in)) {
-            AudioFormat f = ogg.getFormat();
-            ByteBuffer bb = ogg.readAll();
-            bb.order(ByteOrder.LITTLE_ENDIAN);
-            int count = bb.remaining() / 2;
-            short[] raw = new short[count];
-            bb.asShortBuffer().get(raw);
-            int ch = f.getChannels();
-            short[] st;
-            if (ch == 2) {
-                st = raw;
-            } else {
-                st = new short[count * 2];
-                for (int i = 0; i < count; i++) {
-                    st[2 * i] = raw[i];
-                    st[2 * i + 1] = raw[i];
+        // OGG Vorbis: декодер STB из LWJGL, он входит в Minecraft (внутренние классы игры для этого не используем).
+        byte[] bytes = Files.readAllBytes(file);
+        ByteBuffer mem = MemoryUtil.memAlloc(bytes.length);
+        try {
+            mem.put(bytes).flip();
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                IntBuffer channels = stack.mallocInt(1);
+                IntBuffer rate = stack.mallocInt(1);
+                ShortBuffer pcm = STBVorbis.stb_vorbis_decode_memory(mem, channels, rate);
+                if (pcm == null) {
+                    throw new IllegalStateException("not a valid OGG Vorbis file");
+                }
+                try {
+                    int ch = Math.max(1, channels.get(0));
+                    int frames = pcm.remaining() / ch;
+                    short[] st = new short[frames * 2];
+                    for (int i = 0; i < frames; i++) {
+                        short l = pcm.get(i * ch);
+                        short r = ch > 1 ? pcm.get(i * ch + 1) : l;
+                        st[2 * i] = l;
+                        st[2 * i + 1] = r;
+                    }
+                    return limit(new Track(st, rate.get(0)));
+                } finally {
+                    MemoryUtil.memFree(pcm);
                 }
             }
-            return limit(new Track(st, (int) f.getSampleRate()));
+        } finally {
+            MemoryUtil.memFree(mem);
         }
     }
 
