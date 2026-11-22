@@ -115,9 +115,7 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
-// MP3: декодер JLayer (LGPL 2.1) вкладывается в мод (Jar-in-Jar).
-jarJar.enable()
-
+// MP3: декодер JLayer (LGPL 2.1) вкладывается в мод (Jar-in-Jar, конфигурация jarJar есть в ModDevGradle сразу).
 dependencies {
     jarJar(implementation("com.googlecode.soundlibs:jlayer")) {
         version {
