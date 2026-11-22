@@ -60,7 +60,7 @@ public final class PlayerScreen extends Screen {
         volY = y0 + 28 + d + 86;
         urlY = y0 + 28 + d + 106;
 
-        url = new EditBox(font, x0 + 12, urlY, W - 12 - 12 - 22, 18, Component.translatable("aifriend.player.url"));
+        url = new EditBox(font, x0 + 12, urlY, W - 12 - 12 - 22 - 24, 18, Component.translatable("aifriend.player.url"));
         url.setMaxLength(300);
         url.setHint(Component.translatable("aifriend.player.url_hint").withStyle(net.minecraft.ChatFormatting.DARK_GRAY));
         addRenderableWidget(url);
@@ -121,6 +121,7 @@ public final class PlayerScreen extends Screen {
         g.fill(kx - 2, progY - 2, kx + 3, progY + 4, stream ? 0xFFE6E6E6 : 0xFF555555);
         String time = clock(dragSeek ? dur * seekFrac : pos) + " / " + clock(dur);
         g.drawString(font, time, bx, progY + 8, 0xFF8A8A8A, false);
+        g.fill(x0 + W - 24, progY + 8, x0 + W - 16, progY + 16, MusicPlayer.isActive() || stream ? ICON : DIM); // стоп
 
         // кнопки
         boolean playing = stream ? !MusicStreamer.isPaused() : (MusicPlayer.isActive() && MusicPlayer.isSpinning());
@@ -151,6 +152,11 @@ public final class PlayerScreen extends Screen {
         if (!st.isEmpty()) {
             g.drawString(font, font.plainSubstrByWidth(st, W - 24), x0 + 12, urlY + 23, MusicPlayer.statusIsError() ? 0xFFE0A060 : 0xFF8AC08A, false);
         }
+        // кнопка "включить" рядом со ссылкой
+        boolean hasUrl = !url.getValue().isBlank();
+        boolean overGo = in(mx, my, x0 + W - 48, urlY, 20, 18);
+        g.fill(x0 + W - 48, urlY, x0 + W - 28, urlY + 18, hasUrl ? (overGo ? 0xFF4FA865 : 0xFF3D8C52) : 0xFF2A2A2A);
+        tri(g, x0 + W - 41, urlY + 4, 10, hasUrl ? 0xFFFFFFFF : DIM, true);
         icFolder(g, x0 + W - 21, urlY + 3, MusicLinkHover(mx, my) ? GREEN : ICON);
         super.render(g, mx, my, pt);
 
@@ -227,9 +233,17 @@ public final class PlayerScreen extends Screen {
                 listScroll = 0;
                 return true;
             }
+            if (in(mx, my, x0 + W - 48, urlY, 20, 18)) {
+                submitUrl();
+                return true;
+            }
             if (inFolder(mx, my)) {
                 MusicCatalog.ensureDir();
                 Util.getPlatform().openFile(MusicCatalog.dir().toFile());
+                return true;
+            }
+            if (in(mx, my, x0 + W - 30, progY + 4, 20, 16)) {
+                MusicPlayer.command("stop");
                 return true;
             }
             if (in(mx, my, x0 + 12, progY - 5, W - 24, 12) && MusicStreamer.isPlaying()) {
@@ -281,10 +295,19 @@ public final class PlayerScreen extends Screen {
         return true;
     }
 
+    private void submitUrl() {
+        String q = url.getValue().trim();
+        if (q.isEmpty()) {
+            MusicPlayer.setStatus(Component.translatable("aifriend.player.status.empty").getString(), true);
+            return;
+        }
+        MusicLinks.handle(q, this, true);
+        url.setValue("");
+    }
+
     private void playPause() {
         if (MusicStreamer.isPlaying()) {
-            MusicStreamer.togglePause();
-            MusicPlayer.toggleSpin();
+            MusicPlayer.toggleSpin(); // для файлов это ставит на паузу и пластинку, и звук
         } else if (MusicPlayer.isActive()) {
             MusicPlayer.toggleSpin(); // ссылка из браузера: управлять звуком мы не можем, крутится только пластинка
         } else {
@@ -346,11 +369,7 @@ public final class PlayerScreen extends Screen {
     @Override
     public boolean keyPressed(int key, int scan, int mods) {
         if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && url.isFocused()) {
-            String q = url.getValue().trim();
-            if (!q.isEmpty()) {
-                MusicLinks.handle(q, this, true);
-                url.setValue("");
-            }
+            submitUrl();
             return true;
         }
         return super.keyPressed(key, scan, mods);

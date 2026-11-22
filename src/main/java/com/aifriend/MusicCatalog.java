@@ -81,6 +81,14 @@ public final class MusicCatalog {
                 return c;
             }
         }
+        for (String n : new String[] { "cover", "folder", "front" }) { // общая обложка папки
+            for (String ext : new String[] { ".png", ".jpg", ".jpeg" }) {
+                Path c = track.resolveSibling(n + ext);
+                if (Files.isRegularFile(c)) {
+                    return c;
+                }
+            }
+        }
         return null;
     }
 }

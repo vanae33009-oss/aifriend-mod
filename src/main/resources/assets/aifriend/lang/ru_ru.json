@@ -79,5 +79,6 @@
   "aifriend.player.empty": "В папке пусто (.mp3, .ogg или .wav)",
   "aifriend.player.status.loading": "Ищу данные…",
   "aifriend.player.status.ok": "Готово",
-  "aifriend.player.status.no_cover": "Без обложки: %s"
+  "aifriend.player.status.no_cover": "Без обложки: %s",
+  "aifriend.player.status.empty": "Вставь ссылку или название"
 }

@@ -74,22 +74,28 @@ public final class MusicPlayer {
     }
 
     /** Трек из файла: название по имени файла, обложка из картинки рядом (если есть). */
-    public static void showLocal(String name, @Nullable java.nio.file.Path coverFile) {
+    public static void showLocal(String name, String artist, @Nullable java.nio.file.Path coverFile, @Nullable byte[] embedded) {
         active = true;
         spinning = true;
         title = name;
-        subtitle = "";
+        subtitle = artist == null ? "" : artist;
+        setStatus("", false);
         releaseCover();
-        if (coverFile != null) {
+        if (embedded != null || coverFile != null) {
             CompletableFuture.runAsync(() -> {
                 try {
-                    BufferedImage src = ImageIO.read(coverFile.toFile());
+                    BufferedImage src = embedded != null ? ImageIO.read(new ByteArrayInputStream(embedded)) : null;
+                    if (src == null && coverFile != null) {
+                        src = ImageIO.read(coverFile.toFile());
+                    }
                     if (src != null) {
                         NativeImage circle = circleCrop(src, 96, false);
                         Minecraft.getInstance().execute(() -> setCover(circle));
+                    } else {
+                        AiFriendMod.LOGGER.warn("AI Friend: the cover of '{}' is in a format Java cannot read (use JPEG or PNG)", name);
                     }
                 } catch (Exception e) {
-                    AiFriendMod.LOGGER.warn("AI Friend: cannot read cover {}: {}", coverFile.getFileName(), e.toString());
+                    AiFriendMod.LOGGER.warn("AI Friend: cannot read the cover of '{}': {}", name, e.toString());
                 }
             });
         }
@@ -444,7 +450,7 @@ public final class MusicPlayer {
     /** Нажатие кнопки мышью (экран открыт). true - клик был по кнопке плеера. */
     public static boolean click(double mx, double my) {
         Minecraft mc = Minecraft.getInstance();
-        if (!active || mc.options.hideGui) {
+        if (!active || mc.options.hideGui || mc.screen instanceof PlayerScreen) { // в плеере свои кнопки, а мини-кнопки скрыты
             return false;
         }
         int w = mc.getWindow().getGuiScaledWidth();

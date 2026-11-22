@@ -181,9 +181,27 @@ public final class MusicStreamer {
             return;
         }
         String title = MusicCatalog.title(file);
+        String artist = "";
+        byte[] embedded = null;
+        if (file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mp3")) {
+            try {
+                MusicTags.Tags tags = MusicTags.read(Files.readAllBytes(file));
+                if (!tags.title().isBlank()) {
+                    title = tags.title();
+                }
+                artist = tags.artist();
+                embedded = tags.image();
+            } catch (Exception ignored) {
+                // без тегов
+            }
+        }
         current = title;
         Path cover = MusicCatalog.cover(file);
-        Minecraft.getInstance().execute(() -> MusicPlayer.showLocal(title, cover));
+        String shownTitle = title;
+        String shownArtist = artist;
+        byte[] shownCover = embedded;
+        AiFriendMod.LOGGER.info("AI Friend: track '{}' by '{}', embedded cover: {}", title, artist, embedded != null ? embedded.length + " bytes" : "none");
+        Minecraft.getInstance().execute(() -> MusicPlayer.showLocal(shownTitle, shownArtist, cover, shownCover));
 
         String device = VoiceSettings.get().outputDevice;
         Mixer mixer = Speaker.findMixer(device);

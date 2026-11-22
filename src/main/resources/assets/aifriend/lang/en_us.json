@@ -79,5 +79,6 @@
   "aifriend.player.empty": "The folder is empty (.mp3, .ogg or .wav)",
   "aifriend.player.status.loading": "Looking up…",
   "aifriend.player.status.ok": "Done",
-  "aifriend.player.status.no_cover": "No cover: %s"
+  "aifriend.player.status.no_cover": "No cover: %s",
+  "aifriend.player.status.empty": "Paste a link or a name first"
 }

@@ -11,6 +11,7 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
+import com.aifriend.AiFriendMod;
 import com.aifriend.MusicCatalog;
 import com.aifriend.ai.AiSettings;
 import com.aifriend.voice.MusicStreamer;
@@ -107,6 +108,12 @@ public final class MusicLinks {
             }
         }
         query = query.trim().replaceAll("[\\s.,;)]+$", "");
+        // Ссылку без https:// (например "youtu.be/abc" или "open.spotify.com/track/...") тоже принимаем
+        String ql = query.toLowerCase(Locale.ROOT);
+        if (!ql.startsWith("http") && !ql.contains(" ") && (ql.startsWith("www.") || HOSTS.stream().anyMatch(h -> ql.startsWith(h + "/")))) {
+            query = "https://" + query;
+        }
+        AiFriendMod.LOGGER.info("AI Friend: music request '{}' (from {})", query, user ? "player" : "friend");
         long now = System.currentTimeMillis();
         if (!user && (now - lastOpenMs < 8000 || mc.screen instanceof ConfirmLinkScreen)) {
             return; // не заваливаем игрока окнами
